@@ -84,12 +84,15 @@ public sealed class AlarmWindow : Window
         dismiss.Click += (_, _) => Close(); panel.Children.Add(dismiss);
         var audioStatus = new TextBlock { Foreground = soft, TextAlignment = TextAlignment.Center, FontSize = 13, Margin = new Thickness(0, 8, 0, 0) };
         panel.Children.Add(audioStatus);
-        root.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        var scroller = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        root.Children.Add(scroller);
         Content = root;
         KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
         audio.PlaybackFailed += () => audioStatus.Text = "Não foi possível tocar a música. Usando o som padrão.";
         Loaded += (_, _) => {
             NativeWindow.Activate(this); done.Focus(); audio.Play(song); clock.Start();
+            Motion.Zoom(scroller, 0.86, ms: 520); Motion.Enter(corner, x: -20, y: 0, ms: 420, delay: 150);
+            for (int i = 0; i < pills.Children.Count; i++) Motion.Enter(pills.Children[i], y: 10, ms: 320, delay: 280 + i * 80);
             if (!SystemParameters.ClientAreaAnimation) return;
             // Shake the whole card every 3 seconds for as long as the alarm is ringing.
             var movement = new TranslateTransform(); panel.RenderTransform = movement;

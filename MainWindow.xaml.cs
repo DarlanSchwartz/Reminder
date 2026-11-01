@@ -12,6 +12,12 @@ public partial class MainWindow : Window
 {
     private readonly TaskService service;
     private bool completed;
+    // Ids already on screen: only cards that newly appear animate in.
+    private readonly System.Collections.Generic.HashSet<Guid> shown = new();
+    private int slideFrom;
+    private bool tabPlaced;
+    private ContextMenu? settingsMenu;
+    private bool settingsClosedOnGear;
     public MainWindow(TaskService service)
     {
         InitializeComponent(); this.service = service;
@@ -22,28 +28,59 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => NativeWindow.Round(this);
         service.Changed += Refresh;
         Closing += OnClosing;
+        // Reopening from the tray replays the entrance.
+        IsVisibleChanged += (_, e) => { if ((bool)e.NewValue) { shown.Clear(); Motion.Enter(Root, y: 10, ms: 240); Refresh(); } };
         Refresh();
     }
     public void Refresh()
     {
         var tasks = service.State.Tasks.Where(t => t.Completed == completed).OrderBy(t => t.DueDate ?? DateTime.MaxValue).ThenBy(t => t.AlarmAt).ToList();
-        int pending = service.State.Tasks.Count(t => !t.Completed), done = service.State.Tasks.Count - pending;
         TaskList.ItemsSource = tasks;
+        bool wasEmpty = EmptyState.Visibility == Visibility.Visible;
         EmptyState.Visibility = tasks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        EmptyIcon.Text = completed ? "" : "";
+        if (tasks.Count == 0 && !wasEmpty) Motion.Zoom(EmptyState, 0.9);
+        EmptyIcon.Text = completed ? "\uE73E" : "\uE8FB";
         EmptyTitle.Text = completed ? "Nada concluído ainda" : "Tudo em dia";
         EmptyText.Text = completed ? "Tarefas marcadas como feitas aparecem aqui." : "Crie uma tarefa e, se quiser, um alarme que se repete.";
-        PendingTab.Content = pending > 0 ? $"A fazer  ·  {pending}" : "A fazer";
-        DoneTab.Content = done > 0 ? $"Concluídas  ·  {done}" : "Concluídas";
+        PendingTab.Content = "A fazer";
+        DoneTab.Content = "Concluídas";
         StyleTab(PendingTab, !completed);
         StyleTab(DoneTab, completed);
         PinButton.Foreground = Topmost ? Brushes.White : new SolidColorBrush(Color.FromArgb(150, 255, 255, 255));
-        PinButton.Content = Topmost ? "" : "";
+        PinButton.Content = Topmost ? "\uE840" : "\uE718";
+        if (tabPlaced) PlaceTabPill();
+        // Containers exist after layout; stagger the cards that just appeared.
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () =>
+        {
+            int order = 0;
+            for (int i = 0; i < tasks.Count; i++)
+            {
+                if (shown.Contains(tasks[i].Id) || TaskList.ItemContainerGenerator.ContainerFromIndex(i) is not UIElement card) continue;
+                Motion.Enter(card, x: slideFrom * 24, y: slideFrom == 0 ? 14 : 0, ms: 280, delay: Math.Min(order++, 6) * 45);
+            }
+            shown.Clear(); foreach (var t in tasks) shown.Add(t.Id);
+            slideFrom = 0;
+            if (!tabPlaced) PlaceTabPill();
+        });
+    }
+    private void PlaceTabPill()
+    {
+        var active = completed ? DoneTab : PendingTab;
+        if (active.ActualWidth == 0) return;
+        double x = active.TranslatePoint(new Point(0, 0), TabPill.Parent as UIElement).X;
+        Motion.Glide(TabPill, x, active.ActualWidth, tabPlaced);
+        tabPlaced = true;
     }
     private void StyleTab(Button tab, bool active)
     {
-        tab.Background = active ? Brushes.White : Brushes.Transparent;
-        tab.Foreground = active ? (Brush)FindResource("Ink") : new SolidColorBrush(Color.FromArgb(215, 255, 255, 255));
+        var target = active ? ((SolidColorBrush)FindResource("Ink")).Color : Color.FromArgb(215, 255, 255, 255);
+        // Cross-fade the label colour while the highlight glides underneath.
+        if (tabPlaced && Motion.Enabled && tab.Foreground is SolidColorBrush current && current.Color != target)
+        {
+            var brush = new SolidColorBrush(current.Color); tab.Foreground = brush;
+            brush.BeginAnimation(SolidColorBrush.ColorProperty, new System.Windows.Media.Animation.ColorAnimation(target, TimeSpan.FromMilliseconds(220)));
+        }
+        else if (tab.Foreground is not SolidColorBrush same || same.Color != target) tab.Foreground = new SolidColorBrush(target);
         tab.FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal;
     }
     private void DragHeader(object sender, MouseButtonEventArgs e)
@@ -57,10 +94,11 @@ public partial class MainWindow : Window
         }
         if (e.LeftButton == MouseButtonState.Pressed) { e.Handled = true; DragMove(); service.State.Left = Left; service.State.Top = Top; Try(service.SaveSettings); }
     }
-    private void ShowPending(object sender, RoutedEventArgs e) { completed = false; Refresh(); }
-    private void ShowDone(object sender, RoutedEventArgs e) { completed = true; Refresh(); }
+    // Switching tabs slides the new list in from the side of the chosen tab.
+    private void ShowPending(object sender, RoutedEventArgs e) { if (!completed) return; completed = false; shown.Clear(); slideFrom = -1; Refresh(); }
+    private void ShowDone(object sender, RoutedEventArgs e) { if (completed) return; completed = true; shown.Clear(); slideFrom = 1; Refresh(); }
     private void TogglePin(object sender, RoutedEventArgs e) { Topmost = !Topmost; service.State.Pinned = Topmost; Try(service.SaveSettings); Refresh(); }
-    private void HideWidget(object sender, RoutedEventArgs e) => Hide();
+    private void HideWidget(object sender, RoutedEventArgs e) => Motion.Exit(Root, () => { Hide(); Root.BeginAnimation(OpacityProperty, null); Root.RenderTransform = Transform.Identity; }, y: 8, ms: 140);
     private void AddTask(object sender, RoutedEventArgs e) => OpenEditor(null);
     private void EditTask(object sender, MouseButtonEventArgs e) => Edit((TaskItem)((FrameworkElement)sender).DataContext);
     private void EditTaskButton(object sender, RoutedEventArgs e) => Edit((TaskItem)((FrameworkElement)sender).DataContext);
@@ -68,19 +106,37 @@ public partial class MainWindow : Window
     // The editor replaces the list inside the widget instead of opening a window.
     public void OpenEditor(TaskItem? task)
     {
+        if (EditorHost.Content is EditorPanel) return;
         var editor = new EditorPanel(service, task);
-        editor.Done += () => { EditorHost.Content = null; EditorHost.Visibility = Visibility.Collapsed; Tabs.Visibility = Visibility.Visible; Refresh(); };
+        editor.Done += () => Motion.Exit(EditorHost, () =>
+        {
+            EditorHost.Content = null; EditorHost.BeginAnimation(OpacityProperty, null);
+            Tabs.Visibility = Visibility.Visible; Motion.Enter(Tabs, y: -4, ms: 200);
+            shown.Clear(); Refresh();
+            // The backdrop dissolves while the cards stagger back in.
+            Motion.Exit(EditorShade, () => { if (EditorHost.Content == null) EditorShade.Visibility = Visibility.Collapsed; EditorShade.BeginAnimation(OpacityProperty, null); }, y: 0, ms: 160);
+        }, y: 18, ms: 150);
         EditorHost.Content = editor;
-        EditorHost.Visibility = Visibility.Visible;
+        EditorShade.Visibility = Visibility.Visible;
+        Motion.Enter(EditorShade, y: 0, ms: 100);
+        Motion.Enter(EditorHost, y: 26, ms: 320, delay: 80);
         Tabs.Visibility = Visibility.Hidden;
     }
     private void CompleteTask(object sender, RoutedEventArgs e)
     {
         var task = (TaskItem)((FrameworkElement)sender).DataContext;
-        Try(() => service.Complete(task)); Refresh();
+        var card = TaskList.ItemContainerGenerator.ContainerFromItem(task) as FrameworkElement;
+        // A repeating task stays and moves to its next occurrence; others slide away first.
+        if (card == null || (task.Repeat != null && !task.Completed)) { Try(() => service.Complete(task)); Refresh(); if (card != null) Motion.Zoom(card, 0.97); return; }
+        card.IsHitTestVisible = false;
+        Motion.Exit(card, () => Motion.Collapse(card, () => { Try(() => service.Complete(task)); Refresh(); }), x: completed ? -40 : 40, y: 0, ms: 200);
     }
     private void Settings(object sender, RoutedEventArgs e)
     {
+        // The gear toggles the menu. Clicking it while open closes the menu on mouse-down,
+        // so a click that arrives right after that close must not reopen it.
+        if (settingsMenu?.IsOpen == true) { settingsMenu.IsOpen = false; return; }
+        if (settingsClosedOnGear) { settingsClosedOnGear = false; return; }
         Try(service.RefreshStartup);
         var menu = new ContextMenu { PlacementTarget = (UIElement)sender, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom, HorizontalOffset = -210 };
         MenuItem Item(string glyph, string header, string? hint = null)
@@ -110,6 +166,13 @@ public partial class MainWindow : Window
         test.Click += (_, _) => new AlarmWindow(new TaskItem { Title = "Hora de cuidar do que importa.", Description = "Este é um teste. Seus alarmes aparecerão assim.", AlarmAt = DateTimeOffset.Now }, service, true).Show();
         menu.Items.Add(new Separator());
         var quit = Item("", "Sair do Reminder"); quit.Click += (_, _) => Application.Current.Shutdown();
+        menu.Opened += (_, _) => Motion.Zoom(menu, 0.92, new Point(0.85, 0), 260);
+        var gear = (FrameworkElement)sender;
+        menu.Closed += (_, _) => { settingsClosedOnGear = Mouse.LeftButton == MouseButtonState.Pressed && new Rect(gear.RenderSize).Contains(Mouse.GetPosition(gear)); settingsMenu = null;
+            // Forget the flag once that click has been handled, even if released elsewhere.
+            if (settingsClosedOnGear) { MouseButtonEventHandler? clear = null; clear = (_, _) => { PreviewMouseLeftButtonUp -= clear; Dispatcher.BeginInvoke(() => settingsClosedOnGear = false, System.Windows.Threading.DispatcherPriority.Background); }; PreviewMouseLeftButtonUp += clear; }
+        };
+        settingsMenu = menu;
         menu.IsOpen = true;
     }
     private void OnClosing(object? sender, CancelEventArgs e)

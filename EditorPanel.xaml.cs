@@ -50,15 +50,21 @@ public partial class EditorPanel : UserControl
 
     // Without an alarm only the first two steps apply.
     private int LastStep => AlarmEnabled.IsChecked == true ? 4 : 2;
-    private void ShowStep()
+    private void ShowStep(int direction = 0)
     {
         if (SaveButton == null) return;
         step = Math.Min(step, LastStep);
         var panels = new FrameworkElement[] { TaskStep, WhenStep, RepeatStep, SoundStep };
         for (int i = 0; i < panels.Length; i++) panels[i].Visibility = i + 1 == step ? Visibility.Visible : Visibility.Collapsed;
+        // Steps slide in from the side you are moving towards.
+        if (direction != 0) Motion.Enter(panels[step - 1], x: 36 * direction, y: 0, ms: 280);
         Progress.Children.Clear();
         for (int i = 1; i <= LastStep; i++)
-            Progress.Children.Add(new System.Windows.Controls.Border { Height = 4, CornerRadius = new CornerRadius(2), Margin = new Thickness(0, 0, i < LastStep ? 5 : 0, 0), Background = (System.Windows.Media.Brush)FindResource(i <= step ? "Accent" : "Line") });
+        {
+            var bar = new System.Windows.Controls.Border { Height = 4, CornerRadius = new CornerRadius(2), Margin = new Thickness(0, 0, i < LastStep ? 5 : 0, 0), Background = (System.Windows.Media.Brush)FindResource(i <= step ? "Accent" : "Line") };
+            Progress.Children.Add(bar);
+            if (direction > 0 && i == step) Motion.Fill(bar);
+        }
         bool last = step == LastStep;
         NextButton.Visibility = last ? Visibility.Collapsed : Visibility.Visible;
         SaveButton.Visibility = last ? Visibility.Visible : Visibility.Collapsed;
@@ -71,15 +77,15 @@ public partial class EditorPanel : UserControl
     }
     private void Next(object sender, RoutedEventArgs e)
     {
-        if (step == 1 && string.IsNullOrWhiteSpace(TitleInput.Text)) { ErrorText.Text = "Dê um nome para esta tarefa."; TitleInput.Focus(); return; }
-        if (step == 2 && (AlarmDate.SelectedDate == null || !AlarmTimeParser.TryParse(AlarmTime.Text, out _))) { ErrorText.Text = "Escolha a data e um horário como 14:30."; return; }
-        if (step == 3 && ReadAlarm(out string error) == null) { ErrorText.Text = error; return; }
-        step++; ShowStep();
+        if (step == 1 && string.IsNullOrWhiteSpace(TitleInput.Text)) { ErrorText.Text = "Dê um nome para esta tarefa."; Motion.Shake(ErrorText); TitleInput.Focus(); return; }
+        if (step == 2 && (AlarmDate.SelectedDate == null || !AlarmTimeParser.TryParse(AlarmTime.Text, out _))) { ErrorText.Text = "Escolha a data e um horário como 14:30."; Motion.Shake(ErrorText); return; }
+        if (step == 3 && ReadAlarm(out string error) == null) { ErrorText.Text = error; Motion.Shake(ErrorText); return; }
+        step++; ShowStep(1);
     }
     private void Back(object sender, RoutedEventArgs e)
     {
         if (step == 1) { StopMusic(); Done?.Invoke(); return; }
-        step--; ShowStep();
+        step--; ShowStep(-1);
     }
     private void SetAlarm(DateTime when) { AlarmDate.SelectedDate = when.Date; AlarmTime.Text = when.ToString("HH:mm", CultureInfo.InvariantCulture); }
     private void QuickInHour(object sender, RoutedEventArgs e) => SetAlarm(DateTime.Now.AddHours(1));
@@ -119,9 +125,9 @@ public partial class EditorPanel : UserControl
     private void RepeatChanged(object sender, SelectionChangedEventArgs e)
     {
         if (RepeatFields == null || UntilDate == null) return;
-        RepeatFields.Visibility = Unit != null ? Visibility.Visible : Visibility.Collapsed;
-        WeekFields.Visibility = Unit == RepeatUnit.Week ? Visibility.Visible : Visibility.Collapsed;
-        UntilDate.Visibility = EndMode.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
+        Reveal(RepeatFields, Unit != null);
+        Reveal(WeekFields, Unit == RepeatUnit.Week);
+        Reveal(UntilDate, EndMode.SelectedIndex == 1);
         if (EndMode.SelectedIndex == 1 && UntilDate.SelectedDate == null) UntilDate.SelectedDate = (AlarmDate.SelectedDate ?? DateTime.Today).AddMonths(1);
         if (Unit == RepeatUnit.Week && Days == WeekDays.None && AlarmDate.SelectedDate is { } date)
             foreach (var chip in DayChips.Children.OfType<ToggleButton>()) chip.IsChecked = DayOf(chip) == date.DayOfWeek;
@@ -163,7 +169,14 @@ public partial class EditorPanel : UserControl
         PreviewMusicButton.Content = "";
         musicPreview.Play(musicFolder != null ? SoundLibrary.PickRandom(musicFolder) : musicPath);
     }
-    private void ToggleAlarm(object sender, RoutedEventArgs e) { if (AlarmFields != null) AlarmFields.Visibility = AlarmEnabled.IsChecked == true ? Visibility.Visible : Visibility.Collapsed; ShowStep(); }
+    private void ToggleAlarm(object sender, RoutedEventArgs e) { if (AlarmFields != null) Reveal(AlarmFields, AlarmEnabled.IsChecked == true); ShowStep(); }
+    // Shows or hides an optional section; newly shown sections slide down into place.
+    private static void Reveal(UIElement e, bool show)
+    {
+        bool appearing = show && e.Visibility != Visibility.Visible;
+        e.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (appearing && e.IsVisible) Motion.Enter(e, y: -8, ms: 240);
+    }
     private void FilterAlarmTime(object sender, TextCompositionEventArgs e) => e.Handled = !AlarmTimeParser.HasAllowedCharacters(e.Text);
     private void PasteAlarmTime(object sender, DataObjectPastingEventArgs e)
     {
@@ -234,7 +247,7 @@ public partial class EditorPanel : UserControl
         }
         string error = "";
         var read = AlarmEnabled.IsChecked == true ? ReadAlarm(out error) : null;
-        SummaryBox.Visibility = Unit != null ? Visibility.Visible : Visibility.Collapsed;
+        Reveal(SummaryBox, Unit != null);
         if (read is { repeat: { } repeat } result)
         {
             RepeatSummary.Text = repeat.Describe();
@@ -252,7 +265,7 @@ public partial class EditorPanel : UserControl
     private void Save(object sender, RoutedEventArgs e)
     {
         if (!ValidateAlarm()) return;
-        if (string.IsNullOrWhiteSpace(TitleInput.Text)) { ErrorText.Text = "Dê um nome para esta tarefa."; TitleInput.Focus(); return; }
+        if (string.IsNullOrWhiteSpace(TitleInput.Text)) { ErrorText.Text = "Dê um nome para esta tarefa."; Motion.Shake(ErrorText); TitleInput.Focus(); return; }
         DateTimeOffset? alarm = null;
         Recurrence? repeat = null;
         if (AlarmEnabled.IsChecked == true)

@@ -11,4 +11,5 @@
     <ApplicationIcon>Assets/Reminder.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup><Resource Include="Assets/Reminder.ico"/></ItemGroup>
+  <ItemGroup><None Include="reminder.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/></ItemGroup>
 </Project>

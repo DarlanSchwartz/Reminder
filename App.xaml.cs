@@ -6,6 +6,7 @@ using System.IO.Pipes;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -40,11 +41,13 @@ public partial class App : Application
             string instance = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(root.ToUpperInvariant() + Environment.UserName)))[..16];
             pipeName = "Reminder-" + instance;
             instanceMutex = new Mutex(true, "Local\\" + pipeName, out ownsMutex);
+            if (Cli.IsCommand(e.Args)) { Shutdown(await RunCliAsync(e.Args, root, instance)); return; }
             if (!ownsMutex) {
                 await SendAsync(string.Join(" ", e.Args)); Shutdown(); return;
             }
             service = new TaskService(new TaskStore(Path.Combine(root, "data")), new WindowsAlarmScheduler(Path.Combine(root, "Reminder.exe"), instance));
             try { service.RefreshStartup(); service.SaveSettings(); } catch (System.Runtime.InteropServices.COMException) { }
+            Motion.RegisterPressFeedback();
             widget = new MainWindow(service); MainWindow = widget;
             widget.Show();
             tray = new Forms.NotifyIcon { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Path.Combine(root, "Reminder.exe")), Text = "Reminder · suas tarefas", Visible = true };
@@ -61,6 +64,28 @@ public partial class App : Application
             CheckDue();
         } catch (Exception ex) { MessageBox.Show("Não foi possível abrir o Reminder.\n\n" + ex.Message, "Reminder", MessageBoxButton.OK, MessageBoxImage.Error); Shutdown(1); }
     }
+    // CLI commands run inside the open app when there is one, so the widget and its
+    // in-memory state stay in sync; otherwise they work on the data folder directly.
+    private async Task<int> RunCliAsync(string[] args, string root, string instance)
+    {
+        int code; string output;
+        try {
+            if (ownsMutex) {
+                var cli = new TaskService(new TaskStore(Path.Combine(root, "data")), new WindowsAlarmScheduler(Path.Combine(root, "Reminder.exe"), instance));
+                (code, output) = Cli.Execute(cli, args, Path.Combine(root, "data", "sounds"));
+            } else {
+                using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                await pipe.ConnectAsync(6000);
+                using (var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true })
+                    await writer.WriteLineAsync("--cli " + JsonSerializer.Serialize(args));
+                using var reader = new StreamReader(pipe, Encoding.UTF8);
+                code = int.TryParse(await reader.ReadLineAsync(), out int c) ? c : 1;
+                output = await reader.ReadToEndAsync();
+            }
+        } catch (Exception ex) { code = 1; output = "Erro: " + ex.Message + "\n"; }
+        ConsoleOutput.Write(output, code != 0);
+        return code;
+    }
     private async Task SendAsync(string message)
     {
         using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.Out, PipeOptions.Asynchronous);
@@ -72,10 +97,17 @@ public partial class App : Application
     {
         while (!token.IsCancellationRequested) {
             try {
-                using var pipe = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                using var pipe = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 await pipe.WaitForConnectionAsync(token);
-                using var reader = new StreamReader(pipe);
+                using var reader = new StreamReader(pipe, Encoding.UTF8, false, 1024, leaveOpen: true);
                 string? message = await reader.ReadLineAsync(token);
+                if (message?.StartsWith("--cli ", StringComparison.Ordinal) == true && service != null) {
+                    var args = JsonSerializer.Deserialize<string[]>(message[6..]) ?? [];
+                    var (code, output) = await Dispatcher.InvokeAsync(() => Cli.Execute(service, args, Path.Combine(AppContext.BaseDirectory, "data", "sounds")));
+                    using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true);
+                    await writer.WriteAsync(code + "\n" + output);
+                    continue;
+                }
                 await Dispatcher.InvokeAsync(() => { if (message?.StartsWith("--alarm ", StringComparison.Ordinal) == true) CheckDue(); else if (widget != null) NativeWindow.Activate(widget); });
             } catch (OperationCanceledException) { break; }
             catch (IOException) { /* A caller may close before sending. Keep accepting the next launch. */ }

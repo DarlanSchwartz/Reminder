@@ -48,9 +48,9 @@ internal static class Cli
         Dates: 2026-11-30, 30/11/2026, 30/11, today, tomorrow, +3d.
 
         Examples
-          reminder add "Pagar aluguel" --at "2026-11-05 09:00" --every month --until 2027-06-05
-          reminder add "Academia" --at 07:00 --every week --days mon,wed,fri
-          reminder add "Beber água" --at +1h --every hour --interval 2 --until today
+          reminder add "Pay rent" --at "2026-11-05 09:00" --every month --until 2027-06-05
+          reminder add "Gym" --at 07:00 --every week --days mon,wed,fri
+          reminder add "Drink water" --at +1h --every hour --interval 2 --until today
           reminder list --json
           reminder done 3fa2c1
         """;
@@ -60,8 +60,8 @@ internal static class Cli
     public static (int code, string output) Execute(TaskService service, string[] args, string soundsDirectory)
     {
         try { return Run(service, args, soundsDirectory); }
-        catch (CliError e) { return (2, "Erro: " + e.Message + "\n"); }
-        catch (Exception e) { return (1, "Erro: " + e.Message + "\n"); }
+        catch (CliError e) { return (2, "Error: " + e.Message + "\n"); }
+        catch (Exception e) { return (1, "Error: " + e.Message + "\n"); }
     }
 
     private sealed class CliError(string message) : Exception(message);
@@ -78,7 +78,7 @@ internal static class Cli
             if (Flags.Contains(a)) flags.Add(a);
             else if (a.StartsWith("--", StringComparison.Ordinal))
             {
-                if (i + 1 >= args.Length) throw new CliError($"{a} precisa de um valor.");
+                if (i + 1 >= args.Length) throw new CliError($"{a} needs a value.");
                 options[a] = args[++i];
             }
             else positional.Add(a);
@@ -94,20 +94,20 @@ internal static class Cli
                 var tasks = service.State.Tasks.Where(t => flags.Contains("--all") || t.Completed == flags.Contains("--done"))
                     .OrderBy(t => t.Completed).ThenBy(t => t.AlarmAt ?? DateTimeOffset.MaxValue).ThenBy(t => t.DueDate ?? DateTime.MaxValue).ToList();
                 if (json) return (0, JsonSerializer.Serialize(tasks.Select(ToJson), JsonOptions) + "\n");
-                return (0, tasks.Count == 0 ? "Nenhuma tarefa.\n" : string.Concat(tasks.Select(t => Line(t) + "\n")));
+                return (0, tasks.Count == 0 ? "No tasks.\n" : string.Concat(tasks.Select(t => Line(t) + "\n")));
             case "add":
             {
-                if (positional.Count == 0 || string.IsNullOrWhiteSpace(positional[0])) throw new CliError("informe o título: add \"Título\" [opções].");
-                var task = Apply(new TaskItem { Title = positional[0].Trim() }, options, flags, now, soundsDirectory, isNew: true);
+                if (positional.Count == 0 || string.IsNullOrWhiteSpace(positional[0])) throw new CliError("give a title: add \"Title\" [options].");
+                var task = Apply(new TaskItem { Title = positional[0].Trim() }, options, flags, now, soundsDirectory);
                 service.Put(task);
-                return Report(service, task, json, "Criada");
+                return Report(service, task, json, "Created");
             }
             case "edit":
             {
                 var task = Find(service, positional);
-                var updated = Apply(task, options, flags, now, soundsDirectory, isNew: false);
+                var updated = Apply(task, options, flags, now, soundsDirectory);
                 service.Put(updated);
-                return Report(service, updated, json, "Atualizada");
+                return Report(service, updated, json, "Updated");
             }
             case "show":
             {
@@ -117,26 +117,26 @@ internal static class Cli
             case "done":
             {
                 var task = Find(service, positional);
-                if (task.Completed) return (0, json ? JsonSerializer.Serialize(ToJson(task), JsonOptions) + "\n" : "Já estava concluída.\n");
+                if (task.Completed) return (0, json ? JsonSerializer.Serialize(ToJson(task), JsonOptions) + "\n" : "Already completed.\n");
                 if (flags.Contains("--series") && task.Repeat != null) service.Put(task with { Completed = true, AlarmAt = null });
                 else service.Complete(task);
                 var after = service.State.Tasks.First(t => t.Id == task.Id);
-                return Report(service, after, json, after.Completed ? "Concluída" : "Ocorrência concluída, próxima");
+                return Report(service, after, json, after.Completed ? "Completed" : "Occurrence completed, next");
             }
             case "reopen":
             {
                 var task = Find(service, positional);
                 service.Put(task with { Completed = false });
-                return Report(service, task with { Completed = false }, json, "Reaberta");
+                return Report(service, task with { Completed = false }, json, "Reopened");
             }
             case "remove":
             {
                 var task = Find(service, positional);
                 service.Delete(task);
-                return (0, json ? JsonSerializer.Serialize(new { removed = task.Id }, JsonOptions) + "\n" : $"Removida: {task.Title}\n");
+                return (0, json ? JsonSerializer.Serialize(new { removed = task.Id }, JsonOptions) + "\n" : $"Removed: {task.Title}\n");
             }
         }
-        throw new CliError("comando desconhecido. Use help.");
+        throw new CliError("unknown command. Use help.");
     }
 
     private static (int, string) Report(TaskService service, TaskItem task, bool json, string verb)
@@ -144,45 +144,45 @@ internal static class Cli
         if (json) return (0, JsonSerializer.Serialize(ToJson(task), JsonOptions) + "\n");
         var text = new StringBuilder($"{verb}: {Line(task)}\n");
         if (task.HasAlarm && !service.State.SchedulerConsent)
-            text.Append("Aviso: a integração com o Agendador do Windows está desativada; o alarme toca apenas com o Reminder aberto.\n");
+            text.Append("Note: Windows Task Scheduler integration is off, so the alarm only rings while Reminder is open.\n");
         return (0, text.ToString());
     }
 
     private static TaskItem Find(TaskService service, List<string> positional)
     {
-        if (positional.Count == 0) throw new CliError("informe o id da tarefa (veja list).");
+        if (positional.Count == 0) throw new CliError("give the task id (see list).");
         string id = positional[0].Trim().ToLowerInvariant();
         var matches = service.State.Tasks.Where(t => t.Id.ToString("N").StartsWith(id.Replace("-", ""), StringComparison.Ordinal)).ToList();
-        if (id.Length < 4 || matches.Count == 0) throw new CliError($"nenhuma tarefa com id {positional[0]}.");
-        if (matches.Count > 1) throw new CliError($"id {positional[0]} é ambíguo; use mais caracteres.");
+        if (id.Length < 4 || matches.Count == 0) throw new CliError($"no task with id {positional[0]}.");
+        if (matches.Count > 1) throw new CliError($"id {positional[0]} is ambiguous; use more characters.");
         return matches[0];
     }
 
     // Applies add/edit options. The alarm and repeat rule are rebuilt only when one of their options is given.
-    private static TaskItem Apply(TaskItem task, Dictionary<string, string> o, HashSet<string> flags, DateTime now, string soundsDirectory, bool isNew)
+    private static TaskItem Apply(TaskItem task, Dictionary<string, string> o, HashSet<string> flags, DateTime now, string soundsDirectory)
     {
         foreach (var key in o.Keys)
             if (key is not ("--title" or "--desc" or "--due" or "--at" or "--every" or "--interval" or "--days" or "--until" or "--music" or "--music-folder"))
-                throw new CliError($"opção desconhecida {key}.");
-        if (o.TryGetValue("--title", out var title)) task = task with { Title = string.IsNullOrWhiteSpace(title) ? throw new CliError("o título não pode ficar vazio.") : title.Trim() };
+                throw new CliError($"unknown option {key}.");
+        if (o.TryGetValue("--title", out var title)) task = task with { Title = string.IsNullOrWhiteSpace(title) ? throw new CliError("the title can't be empty.") : title.Trim() };
         if (o.TryGetValue("--desc", out var desc)) task = task with { Description = desc.Trim() };
         if (o.TryGetValue("--due", out var due)) task = task with { DueDate = ParseDate(due, now) };
         if (flags.Contains("--no-due")) task = task with { DueDate = null };
         if (o.TryGetValue("--music", out var music))
         {
-            if (!File.Exists(music) || Path.GetExtension(music).ToLowerInvariant() is not (".mp3" or ".wav")) throw new CliError("--music precisa de um arquivo MP3 ou WAV existente.");
+            if (!File.Exists(music) || Path.GetExtension(music).ToLowerInvariant() is not (".mp3" or ".wav")) throw new CliError("--music needs an existing MP3 or WAV file.");
             task = task with { SoundPath = new SoundLibrary(soundsDirectory).Import(Path.GetFullPath(music)), SoundName = Path.GetFileName(music), SoundFolder = null };
         }
         if (o.TryGetValue("--music-folder", out var folder))
         {
-            if (SoundLibrary.PickRandom(folder) == null) throw new CliError("--music-folder precisa de uma pasta com arquivos MP3 ou WAV.");
+            if (SoundLibrary.PickRandom(folder) == null) throw new CliError("--music-folder needs a folder with MP3 or WAV files.");
             task = task with { SoundFolder = Path.GetFullPath(folder), SoundPath = null, SoundName = null };
         }
         if (flags.Contains("--no-music")) task = task with { SoundPath = null, SoundName = null, SoundFolder = null };
 
         if (flags.Contains("--no-alarm"))
         {
-            if (o.ContainsKey("--at") || o.ContainsKey("--every")) throw new CliError("--no-alarm não combina com --at ou --every.");
+            if (o.ContainsKey("--at") || o.ContainsKey("--every")) throw new CliError("--no-alarm can't be combined with --at or --every.");
             return task with { AlarmAt = null, Repeat = null, AlertShown = false };
         }
         bool repeatOptions = o.ContainsKey("--every") || o.ContainsKey("--interval") || o.ContainsKey("--days") || o.ContainsKey("--until") || flags.Contains("--no-repeat") || flags.Contains("--no-until");
@@ -190,7 +190,7 @@ internal static class Cli
 
         // Start from the given time, or keep the current series anchor / alarm time.
         DateTime start = o.TryGetValue("--at", out var at) ? ParseWhen(at, now)
-            : task.Repeat?.Start ?? task.AlarmAt?.LocalDateTime ?? throw new CliError("informe --at para definir o alarme.");
+            : task.Repeat?.Start ?? task.AlarmAt?.LocalDateTime ?? throw new CliError("give --at to set the alarm.");
 
         Recurrence? repeat = flags.Contains("--no-repeat") ? null : task.Repeat;
         if (o.TryGetValue("--every", out var every))
@@ -199,14 +199,14 @@ internal static class Cli
             repeat = new Recurrence { Unit = unit, Interval = 1, Days = preset };
         }
         if (repeat == null && (o.ContainsKey("--interval") || o.ContainsKey("--days") || o.ContainsKey("--until")))
-            throw new CliError("use --every para criar uma repetição.");
+            throw new CliError("use --every to create a repetition.");
         if (repeat != null)
         {
             if (o.TryGetValue("--interval", out var n))
-                repeat = repeat with { Interval = int.TryParse(n, NumberStyles.None, CultureInfo.InvariantCulture, out int i) && i is >= 1 and <= 999 ? i : throw new CliError("--interval deve ser de 1 a 999.") };
+                repeat = repeat with { Interval = int.TryParse(n, NumberStyles.None, CultureInfo.InvariantCulture, out int i) && i is >= 1 and <= 999 ? i : throw new CliError("--interval must be from 1 to 999.") };
             if (o.TryGetValue("--days", out var days))
             {
-                if (repeat.Unit != RepeatUnit.Week) throw new CliError("--days só vale com --every week.");
+                if (repeat.Unit != RepeatUnit.Week) throw new CliError("--days only works with --every week.");
                 repeat = repeat with { Days = ParseDays(days) };
             }
             if (repeat.Unit == RepeatUnit.Week && repeat.Days == WeekDays.None) repeat = repeat with { Days = Recurrence.Flag(start.DayOfWeek) };
@@ -217,17 +217,17 @@ internal static class Cli
         }
 
         var local = DateTime.SpecifyKind(start, DateTimeKind.Unspecified);
-        if (TimeZoneInfo.Local.IsInvalidTime(local)) throw new CliError("esse horário não existe no fuso local.");
+        if (TimeZoneInfo.Local.IsInvalidTime(local)) throw new CliError("that time doesn't exist in the local time zone.");
         var chosen = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
         DateTimeOffset alarm;
         if (repeat != null)
         {
             var nowOffset = DateTimeOffset.Now;
-            alarm = repeat.Next(chosen > nowOffset ? chosen.AddTicks(-1) : nowOffset) ?? throw new CliError("a repetição termina antes do próximo aviso.");
+            alarm = repeat.Next(chosen > nowOffset ? chosen.AddTicks(-1) : nowOffset) ?? throw new CliError("the repetition ends before the next alert.");
         }
         else
         {
-            if (chosen <= DateTimeOffset.Now) throw new CliError("o alarme precisa estar no futuro.");
+            if (chosen <= DateTimeOffset.Now) throw new CliError("the alarm must be in the future.");
             alarm = chosen;
         }
         return task with { AlarmAt = alarm, Repeat = repeat, AlertShown = false, Completed = false };
@@ -236,14 +236,14 @@ internal static class Cli
     private static (RepeatUnit, WeekDays) ParseUnit(string text) => text.Trim().ToLowerInvariant() switch
     {
         "hour" or "hours" or "hourly" or "hora" or "horas" => (RepeatUnit.Hour, WeekDays.None),
-        "day" or "days" or "daily" or "dia" or "dias" or "diariamente" => (RepeatUnit.Day, WeekDays.None),
-        "week" or "weeks" or "weekly" or "semana" or "semanas" or "semanalmente" => (RepeatUnit.Week, WeekDays.None),
+        "day" or "days" or "daily" or "dia" or "día" or "días" or "diario" or "dias" or "diariamente" => (RepeatUnit.Day, WeekDays.None),
+        "week" or "weeks" or "weekly" or "semanal" or "semana" or "semanas" or "semanalmente" => (RepeatUnit.Week, WeekDays.None),
         "weekday" or "weekdays" or "workday" or "workdays" or "dias-uteis" or "dias úteis" =>
             (RepeatUnit.Week, WeekDays.Monday | WeekDays.Tuesday | WeekDays.Wednesday | WeekDays.Thursday | WeekDays.Friday),
         "weekend" or "weekends" or "fim-de-semana" => (RepeatUnit.Week, WeekDays.Saturday | WeekDays.Sunday),
-        "month" or "months" or "monthly" or "mes" or "mês" or "meses" or "mensalmente" => (RepeatUnit.Month, WeekDays.None),
-        "year" or "years" or "yearly" or "annually" or "ano" or "anos" or "anualmente" => (RepeatUnit.Year, WeekDays.None),
-        _ => throw new CliError($"repetição desconhecida \"{text}\". Use hour, day, week, month, year, weekday ou weekend."),
+        "month" or "months" or "monthly" or "mes" or "mês" or "meses" or "mensalmente" or "mensual" => (RepeatUnit.Month, WeekDays.None),
+        "year" or "years" or "yearly" or "annually" or "ano" or "anos" or "año" or "años" or "anual" or "anualmente" => (RepeatUnit.Year, WeekDays.None),
+        _ => throw new CliError($"unknown repeat \"{text}\". Use hour, day, week, month, year, weekday or weekend."),
     };
 
     private static WeekDays ParseDays(string text)
@@ -253,14 +253,14 @@ internal static class Cli
         {
             DayOfWeek day = part[..Math.Min(3, part.Length)] switch
             {
-                "sun" or "dom" => DayOfWeek.Sunday, "mon" or "seg" => DayOfWeek.Monday, "tue" or "ter" => DayOfWeek.Tuesday,
-                "wed" or "qua" => DayOfWeek.Wednesday, "thu" or "qui" => DayOfWeek.Thursday, "fri" or "sex" => DayOfWeek.Friday,
+                "sun" or "dom" => DayOfWeek.Sunday, "mon" or "seg" or "lun" => DayOfWeek.Monday, "tue" or "ter" or "mar" => DayOfWeek.Tuesday,
+                "wed" or "qua" or "mié" or "mie" => DayOfWeek.Wednesday, "thu" or "qui" or "jue" => DayOfWeek.Thursday, "fri" or "sex" or "vie" => DayOfWeek.Friday,
                 "sat" or "sáb" or "sab" => DayOfWeek.Saturday,
-                _ => throw new CliError($"dia desconhecido \"{part}\". Use mon,tue,wed,thu,fri,sat,sun."),
+                _ => throw new CliError($"unknown day \"{part}\". Use mon,tue,wed,thu,fri,sat,sun."),
             };
             result |= Recurrence.Flag(day);
         }
-        return result == WeekDays.None ? throw new CliError("--days está vazio.") : result;
+        return result == WeekDays.None ? throw new CliError("--days is empty.") : result;
     }
 
     private static readonly string[] DateFormats = ["yyyy-MM-dd", "dd/MM/yyyy", "d/M/yyyy", "dd/MM", "d/M"];
@@ -268,19 +268,19 @@ internal static class Cli
     public static DateTime ParseDate(string text, DateTime now)
     {
         string s = text.Trim().ToLowerInvariant();
-        if (s is "today" or "hoje") return now.Date;
-        if (s is "tomorrow" or "amanhã" or "amanha") return now.Date.AddDays(1);
+        if (s is "today" or "hoje" or "hoy") return now.Date;
+        if (s is "tomorrow" or "amanhã" or "amanha" or "mañana" or "manana") return now.Date.AddDays(1);
         if (s.StartsWith('+') && s.EndsWith('d') && int.TryParse(s[1..^1], NumberStyles.None, CultureInfo.InvariantCulture, out int days)) return now.Date.AddDays(days);
         if (DateTime.TryParseExact(s, DateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
             return s.Count(c => c == '/') == 1 && date.Date < now.Date ? date.AddYears(1).Date : date.Date;
-        throw new CliError($"data inválida \"{text}\". Use 2026-11-30, 30/11/2026, today ou tomorrow.");
+        throw new CliError($"invalid date \"{text}\". Use 2026-11-30, 30/11/2026, today or tomorrow.");
     }
 
     // Accepts relative offsets, a date and/or a time. A time alone means its next occurrence.
     public static DateTime ParseWhen(string text, DateTime now)
     {
         string s = text.Trim().ToLowerInvariant();
-        if (s is "now" or "agora") return now.AddMinutes(1);
+        if (s is "now" or "agora" or "ahora") return now.AddMinutes(1);
         if (s.Length > 2 && s[0] == '+' && int.TryParse(s[1..^1], NumberStyles.None, CultureInfo.InvariantCulture, out int amount))
         {
             DateTime result = s[^1] switch { 'm' => now.AddMinutes(amount), 'h' => now.AddHours(amount), 'd' => now.AddDays(amount), 'w' => now.AddDays(7 * amount), _ => default };
@@ -299,29 +299,29 @@ internal static class Cli
             if (parts.Length == 1) return date.AddHours(9);
             if (AlarmTimeParser.TryParse(parts[1], out var time)) return date + time.ToTimeSpan();
         }
-        throw new CliError($"horário inválido \"{text}\". Exemplos: 18:30, \"2026-11-05 09:00\", \"tomorrow 08:00\", +30m.");
+        throw new CliError($"invalid time \"{text}\". Examples: 18:30, \"2026-11-05 09:00\", \"tomorrow 08:00\", +30m.");
     }
 
     private static string Line(TaskItem t)
     {
         var bits = new List<string>();
-        if (t.HasAlarm) bits.Add("alarme " + t.AlarmAt!.Value.LocalDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture));
+        if (t.HasAlarm) bits.Add("alarm " + t.AlarmAt!.Value.LocalDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture));
         if (t.Repeat != null) bits.Add(t.Repeat.ShortLabel);
-        if (t.DueDate is { } d) bits.Add("prazo " + d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        if (t.DueDate is { } d) bits.Add("due " + d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         return $"{t.Id.ToString("N")[..8]}  [{(t.Completed ? "x" : " ")}] {t.Title}" + (bits.Count > 0 ? "  ·  " + string.Join("  ·  ", bits) : "");
     }
 
     private static string Detail(TaskItem t)
     {
         var text = new StringBuilder();
-        text.Append($"Id:         {t.Id}\nTítulo:     {t.Title}\n");
-        if (t.Description.Length > 0) text.Append($"Descrição:  {t.Description}\n");
-        text.Append($"Situação:   {(t.Completed ? "concluída" : "pendente")}\n");
-        if (t.DueDate is { } d) text.Append($"Prazo:      {d:yyyy-MM-dd}\n");
-        if (t.HasAlarm) text.Append($"Alarme:     {t.AlarmAt!.Value.LocalDateTime:yyyy-MM-dd HH:mm}\n");
-        if (t.Repeat != null) text.Append($"Repetição:  {t.Repeat.Describe()}\n");
-        if (t.SoundFolder != null) text.Append($"Música:     aleatória de {t.SoundFolder}\n");
-        else if (t.SoundName != null) text.Append($"Música:     {t.SoundName}\n");
+        text.Append($"Id:         {t.Id}\nTitle:      {t.Title}\n");
+        if (t.Description.Length > 0) text.Append($"Notes:      {t.Description}\n");
+        text.Append($"Status:     {(t.Completed ? "completed" : "pending")}\n");
+        if (t.DueDate is { } d) text.Append($"Due:        {d:yyyy-MM-dd}\n");
+        if (t.HasAlarm) text.Append($"Alarm:      {t.AlarmAt!.Value.LocalDateTime:yyyy-MM-dd HH:mm}\n");
+        if (t.Repeat != null) text.Append($"Repeat:     {t.Repeat.Describe()}\n");
+        if (t.SoundFolder != null) text.Append($"Music:      random from {t.SoundFolder}\n");
+        else if (t.SoundName != null) text.Append($"Music:      {t.SoundName}\n");
         return text.ToString();
     }
 
@@ -346,19 +346,4 @@ internal static class Cli
         },
         music = t.SoundFolder ?? t.SoundName,
     };
-}
-
-// The app is a Windows (GUI) executable: write to redirected handles when an agent
-// captures the output, or attach to the calling console when run interactively.
-internal static class ConsoleOutput
-{
-    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern bool AttachConsole(int processId);
-    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern IntPtr GetStdHandle(int handle);
-    public static void Write(string text, bool error)
-    {
-        var handle = GetStdHandle(error ? -12 : -11);
-        bool attached = (handle == IntPtr.Zero || handle == new IntPtr(-1)) && AttachConsole(-1);
-        using var writer = new StreamWriter(error ? Console.OpenStandardError() : Console.OpenStandardOutput(), attached ? Console.OutputEncoding : new UTF8Encoding(false));
-        writer.Write(attached ? text.Replace("\n", Environment.NewLine) : text);
-    }
 }

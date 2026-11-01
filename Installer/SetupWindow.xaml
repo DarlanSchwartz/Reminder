@@ -1,0 +1,104 @@
+<Window x:Class="ReminderSetup.SetupWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Reminder Setup" Width="440" Height="580" WindowStyle="None" ResizeMode="NoResize" WindowStartupLocation="CenterScreen" Background="{StaticResource Canvas}"
+        Foreground="{StaticResource Ink}" FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13" UseLayoutRounding="True" Icon="Reminder.ico">
+ <WindowChrome.WindowChrome><WindowChrome CaptionHeight="0" ResizeBorderThickness="0" GlassFrameThickness="0" UseAeroCaptionButtons="False"/></WindowChrome.WindowChrome>
+ <Border BorderBrush="{StaticResource Line}" BorderThickness="1">
+  <Grid>
+   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
+   <!-- Header: the widget's teal gradient with the app icon. -->
+   <Grid Height="178" MouseLeftButtonDown="DragWindow">
+    <Grid.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#13917C" Offset="0"/><GradientStop Color="#0B5E52" Offset="1"/></LinearGradientBrush></Grid.Background>
+    <Ellipse Width="260" Height="260" Fill="#14FFFFFF" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-120,-90,0"/>
+    <Ellipse Width="150" Height="150" Fill="#10FFFFFF" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="-50,0,0,-80"/>
+    <Button x:Name="CloseButton" Content="&#xE8BB;" Style="{StaticResource HeaderButton}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0" Click="CloseClicked"/>
+    <StackPanel x:Name="Brand" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,6,0,0">
+     <Border Width="76" Height="76" CornerRadius="20" Background="#26FFFFFF" HorizontalAlignment="Center">
+      <Image x:Name="Logo" Width="52" Height="52" RenderOptions.BitmapScalingMode="HighQuality"/>
+     </Border>
+     <TextBlock Text="Reminder" Foreground="White" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+     <TextBlock x:Name="Subtitle" Foreground="#CFEAE3" FontSize="12" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+    </StackPanel>
+   </Grid>
+
+   <Grid Grid.Row="1" Margin="22,20,22,10" ClipToBounds="True">
+    <!-- Choose options -->
+    <StackPanel x:Name="OptionsPage">
+     <TextBlock x:Name="LocationLabel" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Muted}" Margin="0,0,0,6"/>
+     <Border Style="{StaticResource Card}" Padding="12,8">
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+       <TextBlock Text="&#xE8B7;" FontFamily="{StaticResource Icons}" Foreground="{StaticResource Accent}" VerticalAlignment="Center" Margin="0,1,10,0"/>
+       <TextBlock x:Name="PathText" Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+       <Button x:Name="ChangeButton" Grid.Column="2" Style="{StaticResource Link}" Click="ChangeFolder"/>
+      </Grid>
+     </Border>
+     <TextBlock x:Name="OptionsLabel" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Muted}" Margin="0,16,0,6"/>
+     <Border Style="{StaticResource Card}" Padding="14,4">
+      <StackPanel>
+       <Grid Margin="0,8"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <TextBlock x:Name="DesktopText" VerticalAlignment="Center"/>
+        <CheckBox x:Name="DesktopOption" Grid.Column="1" Style="{StaticResource Switch}" IsChecked="True"/>
+       </Grid>
+       <Border Height="1" Background="{StaticResource Line}"/>
+       <Grid Margin="0,8"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <StackPanel><TextBlock x:Name="PathOptionText"/><TextBlock x:Name="PathOptionHint" FontSize="11.5" Foreground="{StaticResource Muted}"/></StackPanel>
+        <CheckBox x:Name="PathOption" Grid.Column="1" Style="{StaticResource Switch}" IsChecked="True" VerticalAlignment="Center"/>
+       </Grid>
+       <Border Height="1" Background="{StaticResource Line}"/>
+       <Grid Margin="0,8"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <TextBlock x:Name="LaunchText" VerticalAlignment="Center"/>
+        <CheckBox x:Name="LaunchOption" Grid.Column="1" Style="{StaticResource Switch}" IsChecked="True"/>
+       </Grid>
+      </StackPanel>
+     </Border>
+     <Border x:Name="RuntimeWarning" Background="{StaticResource DangerSoft}" CornerRadius="10" Padding="12,9" Margin="0,14,0,0" Visibility="Collapsed">
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+       <TextBlock Text="&#xE7BA;" FontFamily="{StaticResource Icons}" Foreground="{StaticResource Danger}" Margin="0,2,9,0"/>
+       <TextBlock x:Name="RuntimeText" Grid.Column="1" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource Danger}"/>
+       <Button x:Name="RuntimeButton" Grid.Column="2" Style="{StaticResource Link}" Foreground="{StaticResource Danger}" VerticalAlignment="Center" Click="GetRuntime"/>
+      </Grid>
+     </Border>
+    </StackPanel>
+
+    <!-- Confirm removal -->
+    <StackPanel x:Name="UninstallPage" Visibility="Collapsed" VerticalAlignment="Center">
+     <Border Width="64" Height="64" CornerRadius="32" Background="{StaticResource DangerSoft}" HorizontalAlignment="Center"><TextBlock Text="&#xE74D;" FontFamily="{StaticResource Icons}" FontSize="24" Foreground="{StaticResource Danger}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+     <TextBlock x:Name="UninstallTitle" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,14,0,4"/>
+     <TextBlock x:Name="UninstallText" Foreground="{StaticResource Muted}" TextAlignment="Center" TextWrapping="Wrap" HorizontalAlignment="Center"/>
+     <Border Style="{StaticResource Card}" Margin="0,18,0,0">
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+       <StackPanel><TextBlock x:Name="KeepText"/><TextBlock x:Name="KeepHint" FontSize="11.5" Foreground="{StaticResource Muted}"/></StackPanel>
+       <CheckBox x:Name="KeepOption" Grid.Column="1" Style="{StaticResource Switch}" IsChecked="True" VerticalAlignment="Center"/>
+      </Grid>
+     </Border>
+    </StackPanel>
+
+    <!-- Working -->
+    <StackPanel x:Name="ProgressPage" Visibility="Collapsed" VerticalAlignment="Center">
+     <TextBlock x:Name="StatusText" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+     <Border x:Name="Track" Height="6" CornerRadius="3" Background="{StaticResource Line}" Margin="10,18,10,0">
+      <Border x:Name="Fill" CornerRadius="3" Background="{StaticResource Accent}" HorizontalAlignment="Left" Width="0"/>
+     </Border>
+     <TextBlock x:Name="DetailText" FontSize="12" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,10,0,0"/>
+    </StackPanel>
+
+    <!-- Finished -->
+    <StackPanel x:Name="DonePage" Visibility="Collapsed" VerticalAlignment="Center">
+     <Border x:Name="DoneBadge" Width="72" Height="72" CornerRadius="36" Background="{StaticResource AccentSoft}" HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+      <Border.RenderTransform><ScaleTransform/></Border.RenderTransform>
+      <TextBlock x:Name="DoneIcon" Text="&#xE73E;" FontFamily="{StaticResource Icons}" FontSize="30" Foreground="{StaticResource Accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+     </Border>
+     <TextBlock x:Name="DoneTitle" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,16,0,4"/>
+     <TextBlock x:Name="DoneText" Foreground="{StaticResource Muted}" TextAlignment="Center" TextWrapping="Wrap" HorizontalAlignment="Center"/>
+    </StackPanel>
+   </Grid>
+
+   <Border Grid.Row="2" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="22,14,22,16">
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+     <Button x:Name="SecondaryButton" Margin="0,0,8,0" Click="SecondaryClicked"/>
+     <Button x:Name="PrimaryButton" Style="{StaticResource Primary}" MinWidth="120" IsDefault="True" Click="PrimaryClicked"/>
+    </StackPanel>
+   </Border>
+  </Grid>
+ </Border>
+</Window>

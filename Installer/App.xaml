@@ -1,0 +1,42 @@
+<Application x:Class="ReminderSetup.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Startup="OnStartup">
+ <!-- Same palette and controls as the Reminder widget. -->
+ <Application.Resources>
+  <SolidColorBrush x:Key="Ink" Color="#1B2430"/>
+  <SolidColorBrush x:Key="Muted" Color="#6B7785"/>
+  <SolidColorBrush x:Key="Accent" Color="#0E7C6B"/>
+  <SolidColorBrush x:Key="AccentSoft" Color="#E2F3EF"/>
+  <SolidColorBrush x:Key="Canvas" Color="#F3F5F7"/>
+  <SolidColorBrush x:Key="Surface" Color="#FFFFFF"/>
+  <SolidColorBrush x:Key="Line" Color="#E2E7EB"/>
+  <SolidColorBrush x:Key="Danger" Color="#B4442B"/>
+  <SolidColorBrush x:Key="DangerSoft" Color="#FCE9E3"/>
+  <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+  <Style TargetType="Button">
+   <Setter Property="Background" Value="#E9EEF1"/><Setter Property="Foreground" Value="{StaticResource Ink}"/><Setter Property="FontSize" Value="13"/><Setter Property="Padding" Value="18,10"/><Setter Property="Cursor" Value="Hand"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+    <Border x:Name="Surface" Background="{TemplateBinding Background}" CornerRadius="9" Padding="{TemplateBinding Padding}" BorderBrush="Transparent" BorderThickness="2" RenderTransformOrigin="0.5,0.5"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.88"/></Trigger>
+     <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="RenderTransform"><Setter.Value><ScaleTransform ScaleX="0.97" ScaleY="0.97"/></Setter.Value></Setter></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="#7CC8B9"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Background" Value="{StaticResource Accent}"/><Setter Property="Foreground" Value="White"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+  <Style x:Key="Link" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{StaticResource Accent}"/><Setter Property="Padding" Value="6,4"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+  <Style x:Key="HeaderButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="White"/><Setter Property="FontFamily" Value="{StaticResource Icons}"/><Setter Property="FontSize" Value="11"/><Setter Property="Padding" Value="9"/><Setter Property="Focusable" Value="False"/></Style>
+  <Style x:Key="Card" TargetType="Border"><Setter Property="Background" Value="{StaticResource Surface}"/><Setter Property="BorderBrush" Value="{StaticResource Line}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="12"/><Setter Property="Padding" Value="14,12"/></Style>
+  <!-- Toggle switch, as in the widget. -->
+  <Style x:Key="Switch" TargetType="CheckBox">
+   <Setter Property="Cursor" Value="Hand"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox">
+    <Border x:Name="Track" Width="38" Height="22" CornerRadius="11" Background="#C9D3D9"><Ellipse x:Name="Knob" Width="16" Height="16" Fill="White" HorizontalAlignment="Left" Margin="3,0"/></Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsChecked" Value="True"><Setter TargetName="Track" Property="Background" Value="#0E7C6B"/><Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Track" Property="Opacity" Value="0.85"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+ </Application.Resources>
+</Application>

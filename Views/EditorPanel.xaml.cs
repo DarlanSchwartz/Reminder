@@ -43,9 +43,24 @@ public partial class EditorPanel : UserControl
         DeleteButton.Visibility = task == null ? Visibility.Collapsed : Visibility.Visible;
         Loaded += (_, _) => TitleInput.Focus();
         DataObject.AddPastingHandler(AlarmTime, PasteAlarmTime);
+        LabelDays();
         ValidateAlarm();
         ShowStep();
-        Unloaded += (_, _) => StopMusic();
+        // Text set from code follows a language switch made while the editor is open.
+        Action relabel = () => { LabelDays(); UpdateMusicLabel(); BackButton.Content = Loc.T(step == 1 ? "Cancel" : "Back"); ValidateAlarm(); };
+        Loc.Changed += relabel;
+        Unloaded += (_, _) => { StopMusic(); Loc.Changed -= relabel; };
+    }
+    private void LabelDays()
+    {
+        foreach (var chip in DayChips.Children.OfType<ToggleButton>())
+        {
+            var day = DayOf(chip);
+            string name = Loc.Culture.DateTimeFormat.GetDayName(day);
+            chip.Content = Loc.T("DayInitials")[(int)day].ToString();
+            chip.ToolTip = char.ToUpper(name[0], Loc.Culture) + name[1..];
+            System.Windows.Automation.AutomationProperties.SetName(chip, (string)chip.ToolTip);
+        }
     }
 
     // Without an alarm only the first two steps apply.
@@ -69,7 +84,7 @@ public partial class EditorPanel : UserControl
         NextButton.Visibility = last ? Visibility.Collapsed : Visibility.Visible;
         SaveButton.Visibility = last ? Visibility.Visible : Visibility.Collapsed;
         NextButton.IsDefault = !last; SaveButton.IsDefault = last;
-        BackButton.Content = step == 1 ? "Cancelar" : "Voltar";
+        BackButton.Content = Loc.T(step == 1 ? "Cancel" : "Back");
         BackButton.IsCancel = step == 1;
         DeleteButton.Visibility = original != null && step == 1 ? Visibility.Visible : Visibility.Collapsed;
         ErrorText.Text = "";
@@ -77,8 +92,8 @@ public partial class EditorPanel : UserControl
     }
     private void Next(object sender, RoutedEventArgs e)
     {
-        if (step == 1 && string.IsNullOrWhiteSpace(TitleInput.Text)) { ErrorText.Text = "Dê um nome para esta tarefa."; Motion.Shake(ErrorText); TitleInput.Focus(); return; }
-        if (step == 2 && (AlarmDate.SelectedDate == null || !AlarmTimeParser.TryParse(AlarmTime.Text, out _))) { ErrorText.Text = "Escolha a data e um horário como 14:30."; Motion.Shake(ErrorText); return; }
+        if (step == 1 && string.IsNullOrWhiteSpace(TitleInput.Text)) { ErrorText.Text = Loc.T("NeedTitle"); Motion.Shake(ErrorText); TitleInput.Focus(); return; }
+        if (step == 2 && (AlarmDate.SelectedDate == null || !AlarmTimeParser.TryParse(AlarmTime.Text, out _))) { ErrorText.Text = Loc.T("NeedDateTime"); Motion.Shake(ErrorText); return; }
         if (step == 3 && ReadAlarm(out string error) == null) { ErrorText.Text = error; Motion.Shake(ErrorText); return; }
         step++; ShowStep(1);
     }
@@ -93,9 +108,9 @@ public partial class EditorPanel : UserControl
     private void QuickTomorrow(object sender, RoutedEventArgs e) => SetAlarm(DateTime.Today.AddDays(1).AddHours(9));
     private void UpdateMusicLabel()
     {
-        if (musicFolder != null) { MusicIcon.Text = ""; MusicName.Text = "Aleatória · " + Path.GetFileName(musicFolder.TrimEnd('\\')); MusicHint.Text = musicFolder; }
-        else if (musicPath != null) { MusicIcon.Text = ""; MusicName.Text = musicName ?? Path.GetFileName(musicPath); MusicHint.Text = "Repete enquanto o alarme toca"; }
-        else { MusicIcon.Text = ""; MusicName.Text = "Som padrão"; MusicHint.Text = "Alerta do Windows, repetido"; }
+        if (musicFolder != null) { MusicIcon.Text = ""; MusicName.Text = Loc.F("RandomSong", Path.GetFileName(musicFolder.TrimEnd('\\'))); MusicHint.Text = musicFolder; }
+        else if (musicPath != null) { MusicIcon.Text = ""; MusicName.Text = musicName ?? Path.GetFileName(musicPath); MusicHint.Text = Loc.T("SongHint"); }
+        else { MusicIcon.Text = ""; MusicName.Text = Loc.T("DefaultSound"); MusicHint.Text = Loc.T("DefaultSoundHint"); }
         MusicName.ToolTip = MusicName.Text;
     }
 
@@ -146,16 +161,16 @@ public partial class EditorPanel : UserControl
 
     private void ChooseMusic(object sender, RoutedEventArgs e)
     {
-        var picker = new Microsoft.Win32.OpenFileDialog { Title = "Escolher música do lembrete", Filter = "Áudio (MP3, WAV)|*.mp3;*.wav", CheckFileExists = true, InitialDirectory = service.State.MusicFolder ?? "" };
+        var picker = new Microsoft.Win32.OpenFileDialog { Title = Loc.T("ChooseSongTitle"), Filter = Loc.T("AudioFilter") + "|*.mp3;*.wav", CheckFileExists = true, InitialDirectory = service.State.MusicFolder ?? "" };
         if (picker.ShowDialog(Owner) != true) return;
         StopMusic(); ErrorText.Text = ""; musicPath = picker.FileName; musicName = Path.GetFileName(picker.FileName); musicFolder = null; UpdateMusicLabel();
     }
     private void ChooseFolder(object sender, RoutedEventArgs e)
     {
-        var picker = new Microsoft.Win32.OpenFolderDialog { Title = "Pasta com músicas (MP3 ou WAV)", InitialDirectory = musicFolder ?? service.State.MusicFolder ?? "" };
+        var picker = new Microsoft.Win32.OpenFolderDialog { Title = Loc.T("SongFolderTitle"), InitialDirectory = musicFolder ?? service.State.MusicFolder ?? "" };
         if (picker.ShowDialog(Owner) != true) return;
         StopMusic();
-        if (SoundLibrary.PickRandom(picker.FolderName) == null) { ErrorText.Text = "Essa pasta não tem arquivos MP3 ou WAV."; return; }
+        if (SoundLibrary.PickRandom(picker.FolderName) == null) { ErrorText.Text = Loc.T("FolderHasNoSongs"); return; }
         ErrorText.Text = ""; musicFolder = picker.FolderName; UpdateMusicLabel(); ValidateAlarm();
     }
     private void StopMusic() { musicPreview?.Dispose(); musicPreview = null; PreviewMusicButton.Content = ""; }
@@ -165,7 +180,7 @@ public partial class EditorPanel : UserControl
         if (musicPreview != null) { StopMusic(); return; }
         ErrorText.Text = "";
         musicPreview = new AlarmAudio();
-        musicPreview.PlaybackFailed += () => ErrorText.Text = "Falha ao reproduzir: " + musicPreview.LastError;
+        musicPreview.PlaybackFailed += () => ErrorText.Text = Loc.F("PlaybackFailed", musicPreview.LastError ?? "");
         PreviewMusicButton.Content = "";
         musicPreview.Play(musicFolder != null ? SoundLibrary.PickRandom(musicFolder) : musicPath);
     }
@@ -183,7 +198,7 @@ public partial class EditorPanel : UserControl
         if (!e.SourceDataObject.GetDataPresent(DataFormats.UnicodeText) || e.SourceDataObject.GetData(DataFormats.UnicodeText) is not string text || !AlarmTimeParser.TryParse(text, out var time))
         {
             e.CancelCommand();
-            AlarmError.Text = "Cole um horário válido, como 09:30 ou 930.";
+            AlarmError.Text = Loc.T("PasteTime");
             AlarmError.Visibility = Visibility.Visible;
             return;
         }
@@ -217,23 +232,23 @@ public partial class EditorPanel : UserControl
     private (DateTimeOffset alarm, Recurrence? repeat)? ReadAlarm(out string error)
     {
         error = "";
-        if (!AlarmTimeParser.TryParse(AlarmTime.Text, out var time)) { error = "Informe um horário entre 00:00 e 23:59."; return null; }
-        if (AlarmDate.SelectedDate is not { } date) { error = "Escolha a data do alarme."; return null; }
+        if (!AlarmTimeParser.TryParse(AlarmTime.Text, out var time)) { error = Loc.T("TimeRange"); return null; }
+        if (AlarmDate.SelectedDate is not { } date) { error = Loc.T("NeedDate"); return null; }
         var local = DateTime.SpecifyKind(date.Date + time.ToTimeSpan(), DateTimeKind.Unspecified);
-        if (TimeZoneInfo.Local.IsInvalidTime(local)) { error = "Esse horário não existe no fuso local."; return null; }
+        if (TimeZoneInfo.Local.IsInvalidTime(local)) { error = Loc.T("InvalidLocalTime"); return null; }
         var chosen = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
         if (Unit == null)
         {
-            if (chosen <= DateTimeOffset.Now) { error = "Escolha uma data e um horário no futuro."; return null; }
+            if (chosen <= DateTimeOffset.Now) { error = Loc.T("NeedFuture"); return null; }
             return (chosen, null);
         }
-        if (Interval == null) { error = "Informe um intervalo de 1 a 999."; return null; }
-        if (Unit == RepeatUnit.Week && Days == WeekDays.None) { error = "Escolha pelo menos um dia da semana."; return null; }
-        if (EndMode.SelectedIndex == 1 && UntilDate.SelectedDate == null) { error = "Escolha até quando repetir."; return null; }
+        if (Interval == null) { error = Loc.T("IntervalRange"); return null; }
+        if (Unit == RepeatUnit.Week && Days == WeekDays.None) { error = Loc.T("NeedWeekday"); return null; }
+        if (EndMode.SelectedIndex == 1 && UntilDate.SelectedDate == null) { error = Loc.T("NeedUntil"); return null; }
         var repeat = BuildRepeat(local)!;
         // Keep a pending snooze or the current occurrence when nothing relevant changed.
         var alarm = original?.Repeat == repeat && original.AlarmAt > DateTimeOffset.Now && !original.AlertShown ? original.AlarmAt : FirstOccurrence(repeat, chosen);
-        if (alarm is not { } first) { error = "A repetição termina antes do próximo aviso."; return null; }
+        if (alarm is not { } first) { error = Loc.T("EndsBeforeNext"); return null; }
         return (first, repeat);
     }
 
@@ -243,7 +258,7 @@ public partial class EditorPanel : UserControl
         if (IntervalUnit != null)
         {
             bool one = Interval == 1;
-            IntervalUnit.Text = Unit switch { RepeatUnit.Hour => one ? "hora" : "horas", RepeatUnit.Day => one ? "dia" : "dias", RepeatUnit.Week => one ? "semana" : "semanas", RepeatUnit.Month => one ? "mês" : "meses", _ => one ? "ano" : "anos" };
+            IntervalUnit.Text = Loc.T("Unit." + (Unit ?? RepeatUnit.Day) + (one ? "" : "s"));
         }
         string error = "";
         var read = AlarmEnabled.IsChecked == true ? ReadAlarm(out error) : null;
@@ -251,11 +266,11 @@ public partial class EditorPanel : UserControl
         if (read is { repeat: { } repeat } result)
         {
             RepeatSummary.Text = repeat.Describe();
-            NextSummary.Text = "Próximo aviso: " + result.alarm.LocalDateTime.ToString("dddd, dd/MM 'às' HH:mm");
+            NextSummary.Text = Loc.F("NextAlert", result.alarm.LocalDateTime.ToString(Loc.T("fmt.Long")));
         }
-        else if (Unit != null) { RepeatSummary.Text = "Complete os campos para ver a repetição."; NextSummary.Text = ""; }
+        else if (Unit != null) { RepeatSummary.Text = Loc.T("FillFields"); NextSummary.Text = ""; }
         if (FinalSummary != null && read is { } r)
-            FinalSummary.Text = $"{TitleInput.Text.Trim()}\nAviso: {r.alarm.LocalDateTime:dddd, dd/MM 'às' HH:mm}\n{(r.repeat?.Describe() ?? "Não repete.")}\nSom: {MusicName.Text}";
+            FinalSummary.Text = $"{TitleInput.Text.Trim()}\n{Loc.F("SummaryAlert", r.alarm.LocalDateTime.ToString(Loc.T("fmt.Long")))}\n{r.repeat?.Describe() ?? Loc.T("SummaryNoRepeat")}\n{Loc.F("SummarySound", MusicName.Text)}";
         AlarmError.Text = error;
         AlarmError.Visibility = error.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         SaveButton.IsEnabled = error.Length == 0;
@@ -265,25 +280,25 @@ public partial class EditorPanel : UserControl
     private void Save(object sender, RoutedEventArgs e)
     {
         if (!ValidateAlarm()) return;
-        if (string.IsNullOrWhiteSpace(TitleInput.Text)) { ErrorText.Text = "Dê um nome para esta tarefa."; Motion.Shake(ErrorText); TitleInput.Focus(); return; }
+        if (string.IsNullOrWhiteSpace(TitleInput.Text)) { ErrorText.Text = Loc.T("NeedTitle"); Motion.Shake(ErrorText); TitleInput.Focus(); return; }
         DateTimeOffset? alarm = null;
         Recurrence? repeat = null;
         if (AlarmEnabled.IsChecked == true)
         {
             if (ReadAlarm(out string error) is not { } result) { ErrorText.Text = error; return; }
             (alarm, repeat) = result;
-            if (!IntegrationConsent.Ensure(Owner, service)) { ErrorText.Text = "Para salvar sem integração, desmarque o alarme."; return; }
+            if (!IntegrationConsent.Ensure(Owner, service)) { ErrorText.Text = Loc.T("NeedIntegration"); return; }
         }
         try {
             StopMusic();
             string? storedMusic = musicPath == null ? null : new SoundLibrary(Path.Combine(AppContext.BaseDirectory, "data", "sounds")).Import(musicPath);
             service.Put((original ?? new TaskItem()) with { Title = TitleInput.Text.Trim(), Description = DescriptionInput.Text.Trim(), DueDate = DueInput.SelectedDate, AlarmAt = alarm, Repeat = repeat, SoundPath = storedMusic, SoundName = musicName, SoundFolder = musicFolder, AlertShown = false, Completed = alarm != null ? false : original?.Completed ?? false });
             Done?.Invoke();
-        } catch (Exception ex) { ErrorText.Text = "Não foi possível salvar: " + ex.Message; }
+        } catch (Exception ex) { ErrorText.Text = Loc.F("SaveFailed", ex.Message); }
     }
     private void Delete(object sender, RoutedEventArgs e)
     {
-        if (original == null || MessageBox.Show(Owner, "Excluir esta tarefa?", "Reminder", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (original == null || MessageBox.Show(Owner, Loc.T("ConfirmDelete"), "Reminder", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
         try { service.Delete(original); Done?.Invoke(); } catch (Exception ex) { ErrorText.Text = ex.Message; }
     }
 }

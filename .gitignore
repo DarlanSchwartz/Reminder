@@ -5,3 +5,4 @@ app/
 data/
 test-output/
 test-results.txt
+dist/

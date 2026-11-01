@@ -10,7 +10,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Markup;
+
 using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 
@@ -30,39 +30,43 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
-        CultureInfo.CurrentUICulture = CultureInfo.CurrentCulture;
-        FrameworkElement.LanguageProperty.OverrideMetadata(typeof(FrameworkElement), new FrameworkPropertyMetadata(XmlLanguage.GetLanguage("pt-BR")));
+        Loc.Set("en");
         if (e.Args.Contains("--self-test")) { Shutdown(SelfTests.Run()); return; }
         if (e.Args.Contains("--scheduler-test")) { Shutdown(SelfTests.RunWindowsScheduler()); return; }
-        if (e.Args.Length == 2 && e.Args[0] == "--audio-diagnostic") { Shutdown(AudioDiagnostics.Run(e.Args[1])); return; }
         try {
             string root = AppContext.BaseDirectory;
             string instance = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(root.ToUpperInvariant() + Environment.UserName)))[..16];
             pipeName = "Reminder-" + instance;
             instanceMutex = new Mutex(true, "Local\\" + pipeName, out ownsMutex);
+            // Used by the uninstaller: removes this copy's Task Scheduler entries.
+            if (e.Args.Contains("--remove-integration")) {
+                new TaskService(new TaskStore(Path.Combine(root, "data")), new WindowsAlarmScheduler(Path.Combine(root, "Reminder.exe"), instance)).DisableIntegration();
+                Shutdown(0); return;
+            }
             if (Cli.IsCommand(e.Args)) { Shutdown(await RunCliAsync(e.Args, root, instance)); return; }
             if (!ownsMutex) {
                 await SendAsync(string.Join(" ", e.Args)); Shutdown(); return;
             }
             service = new TaskService(new TaskStore(Path.Combine(root, "data")), new WindowsAlarmScheduler(Path.Combine(root, "Reminder.exe"), instance));
             try { service.RefreshStartup(); service.SaveSettings(); } catch (System.Runtime.InteropServices.COMException) { }
+            Loc.Set(service.State.Language);
             Motion.RegisterPressFeedback();
             widget = new MainWindow(service); MainWindow = widget;
             widget.Show();
-            tray = new Forms.NotifyIcon { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Path.Combine(root, "Reminder.exe")), Text = "Reminder · suas tarefas", Visible = true };
+            tray = new Forms.NotifyIcon { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Path.Combine(root, "Reminder.exe")), Text = Loc.T("TrayTip"), Visible = true };
             var menu = new Forms.ContextMenuStrip();
-            menu.Items.Add("Abrir Reminder", null, (_, _) => Dispatcher.Invoke(() => NativeWindow.Activate(widget)));
-            menu.Items.Add("Nova tarefa", null, (_, _) => Dispatcher.Invoke(() => { NativeWindow.Activate(widget); widget.OpenEditor(null); }));
-            menu.Items.Add("Sair", null, (_, _) => Dispatcher.Invoke(Shutdown));
+            menu.Items.Add(Loc.T("TrayOpen"), null, (_, _) => Dispatcher.Invoke(() => NativeWindow.Activate(widget)));
+            menu.Items.Add(Loc.T("NewTask"), null, (_, _) => Dispatcher.Invoke(() => { NativeWindow.Activate(widget); widget.OpenEditor(null); }));
+            menu.Items.Add(Loc.T("TrayQuit"), null, (_, _) => Dispatcher.Invoke(Shutdown));
             tray.ContextMenuStrip = menu;
             tray.DoubleClick += (_, _) => Dispatcher.Invoke(() => NativeWindow.Activate(widget));
+            Loc.Changed += () => { tray.Text = Loc.T("TrayTip"); menu.Items[0].Text = Loc.T("TrayOpen"); menu.Items[1].Text = Loc.T("NewTask"); menu.Items[2].Text = Loc.T("TrayQuit"); };
             lifetime = new CancellationTokenSource();
             _ = ListenAsync(lifetime.Token);
             service.Changed += ScheduleNext;
             alarmTimer.Tick += (_, _) => { alarmTimer.Stop(); CheckDue(); };
             CheckDue();
-        } catch (Exception ex) { MessageBox.Show("Não foi possível abrir o Reminder.\n\n" + ex.Message, "Reminder", MessageBoxButton.OK, MessageBoxImage.Error); Shutdown(1); }
+        } catch (Exception ex) { MessageBox.Show(Loc.T("OpenFailed") + "\n\n" + ex.Message, "Reminder", MessageBoxButton.OK, MessageBoxImage.Error); Shutdown(1); }
     }
     // CLI commands run inside the open app when there is one, so the widget and its
     // in-memory state stay in sync; otherwise they work on the data folder directly.
@@ -72,6 +76,7 @@ public partial class App : Application
         try {
             if (ownsMutex) {
                 var cli = new TaskService(new TaskStore(Path.Combine(root, "data")), new WindowsAlarmScheduler(Path.Combine(root, "Reminder.exe"), instance));
+                Loc.Set(cli.State.Language);
                 (code, output) = Cli.Execute(cli, args, Path.Combine(root, "data", "sounds"));
             } else {
                 using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
@@ -82,7 +87,7 @@ public partial class App : Application
                 code = int.TryParse(await reader.ReadLineAsync(), out int c) ? c : 1;
                 output = await reader.ReadToEndAsync();
             }
-        } catch (Exception ex) { code = 1; output = "Erro: " + ex.Message + "\n"; }
+        } catch (Exception ex) { code = 1; output = "Error: " + ex.Message + "\n"; }
         ConsoleOutput.Write(output, code != 0);
         return code;
     }
@@ -135,7 +140,7 @@ public partial class App : Application
                 alert.Show();
                 service.Acknowledge(task);
                 break;
-            } catch (Exception ex) { MessageBox.Show("O alarme foi disparado, mas houve uma falha ao atualizar seu estado.\n" + ex.Message, "Reminder"); }
+            } catch (Exception ex) { MessageBox.Show(Loc.T("AlarmStateFailed") + "\n" + ex.Message, "Reminder"); }
         }
         ScheduleNext();
     }

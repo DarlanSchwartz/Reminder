@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Automation;
 using System.Windows.Input;
 using System.Windows.Media;
 
@@ -27,6 +28,9 @@ public partial class MainWindow : Window
         Top = Math.Clamp(service.State.Top ?? area.Top + 45, area.Top, Math.Max(area.Top, area.Bottom - Height));
         SourceInitialized += (_, _) => NativeWindow.Round(this);
         service.Changed += Refresh;
+        Language = Loc.Xml;
+        // Tab labels change width with the language, so the highlight is re-measured after layout.
+        Loc.Changed += () => { Language = Loc.Xml; Refresh(); Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, PlaceTabPill); };
         Closing += OnClosing;
         // Reopening from the tray replays the entrance.
         IsVisibleChanged += (_, e) => { if ((bool)e.NewValue) { shown.Clear(); Motion.Enter(Root, y: 10, ms: 240); Refresh(); } };
@@ -40,10 +44,10 @@ public partial class MainWindow : Window
         EmptyState.Visibility = tasks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (tasks.Count == 0 && !wasEmpty) Motion.Zoom(EmptyState, 0.9);
         EmptyIcon.Text = completed ? "\uE73E" : "\uE8FB";
-        EmptyTitle.Text = completed ? "Nada concluído ainda" : "Tudo em dia";
-        EmptyText.Text = completed ? "Tarefas marcadas como feitas aparecem aqui." : "Crie uma tarefa e, se quiser, um alarme que se repete.";
-        PendingTab.Content = "A fazer";
-        DoneTab.Content = "Concluídas";
+        EmptyTitle.Text = Loc.T(completed ? "EmptyDoneTitle" : "EmptyTitle");
+        EmptyText.Text = Loc.T(completed ? "EmptyDoneText" : "EmptyText");
+        PendingTab.Content = Loc.T("TabPending");
+        DoneTab.Content = Loc.T("TabDone");
         StyleTab(PendingTab, !completed);
         StyleTab(DoneTab, completed);
         PinButton.Foreground = Topmost ? Brushes.White : new SolidColorBrush(Color.FromArgb(150, 255, 255, 255));
@@ -146,26 +150,43 @@ public partial class MainWindow : Window
             menu.Items.Add(item);
             return item;
         }
-        menu.Items.Add(new MenuItem { Header = "PREFERÊNCIAS", IsEnabled = false, Style = (Style)FindResource("MenuHeading") });
-        var startup = Item("", "Iniciar com o Windows");
+        menu.Items.Add(new MenuItem { Header = Loc.T("Preferences"), IsEnabled = false, Style = (Style)FindResource("MenuHeading") });
+        var startup = Item("", Loc.T("StartWithWindows"));
         startup.IsCheckable = true; startup.IsChecked = service.State.StartupEnabled;
         startup.Click += (_, _) => {
             if (!service.State.StartupEnabled && !IntegrationConsent.Ensure(this, service)) return;
             Try(() => service.SetStartup(!service.State.StartupEnabled));
         };
-        var integration = Item("", service.State.SchedulerConsent ? "Desativar integração com o Windows" : "Permitir alarmes agendados…");
+        var integration = Item("", Loc.T(service.State.SchedulerConsent ? "DisableIntegration" : "AllowScheduled"));
         integration.Click += (_, _) => { if (service.State.SchedulerConsent) Try(service.DisableIntegration); else IntegrationConsent.Ensure(this, service); };
-        var folder = Item("", "Pasta de músicas…", service.State.MusicFolder is { } f ? System.IO.Path.GetFileName(f.TrimEnd('\\')) : null);
-        folder.ToolTip = service.State.MusicFolder ?? "Pasta onde o seletor de músicas abre por padrão";
+        var folder = Item("", Loc.T("MusicFolder"), service.State.MusicFolder is { } f ? System.IO.Path.GetFileName(f.TrimEnd('\\')) : null);
+        folder.ToolTip = service.State.MusicFolder ?? Loc.T("MusicFolderTip");
         folder.Click += (_, _) => {
-            var picker = new Microsoft.Win32.OpenFolderDialog { Title = "Pasta de músicas do Reminder", InitialDirectory = service.State.MusicFolder ?? "" };
+            var picker = new Microsoft.Win32.OpenFolderDialog { Title = Loc.T("MusicFolderTitle"), InitialDirectory = service.State.MusicFolder ?? "" };
             if (picker.ShowDialog(this) == true) { service.State.MusicFolder = picker.FolderName; Try(service.SaveSettings); }
         };
+        // Language picker: a small segmented control inside one menu row.
+        var languages = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16, 0, 0, 0) };
+        foreach (var (code, name) in Loc.Languages)
+        {
+            bool active = code == Loc.Language;
+            var choice = new Button { Content = code.ToUpperInvariant(), ToolTip = name, FontSize = 11, Padding = new Thickness(7, 2, 7, 2), Margin = new Thickness(2, 0, 0, 0), Focusable = false,
+                Background = active ? (Brush)FindResource("Accent") : Brushes.Transparent, Foreground = active ? Brushes.White : (Brush)FindResource("Ink"), FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal };
+            AutomationProperties.SetName(choice, name);
+            choice.Click += (_, _) => { menu.IsOpen = false; if (active) return; service.State.Language = code; Try(service.SaveSettings); Loc.Set(code); };
+            languages.Children.Add(choice);
+        }
+        var languageRow = new DockPanel();
+        DockPanel.SetDock(languages, Dock.Right);
+        languageRow.Children.Add(languages);
+        languageRow.Children.Add(new TextBlock { Text = Loc.T("Language"), VerticalAlignment = VerticalAlignment.Center });
+        var language = Item("", "");
+        language.Header = languageRow; language.StaysOpenOnClick = true;
         menu.Items.Add(new Separator());
-        var test = Item("", "Experimentar o alerta");
-        test.Click += (_, _) => new AlarmWindow(new TaskItem { Title = "Hora de cuidar do que importa.", Description = "Este é um teste. Seus alarmes aparecerão assim.", AlarmAt = DateTimeOffset.Now }, service, true).Show();
+        var test = Item("", Loc.T("TryAlert"));
+        test.Click += (_, _) => new AlarmWindow(new TaskItem { Title = Loc.T("SampleTitle"), Description = Loc.T("SampleText"), AlarmAt = DateTimeOffset.Now }, service, true).Show();
         menu.Items.Add(new Separator());
-        var quit = Item("", "Sair do Reminder"); quit.Click += (_, _) => Application.Current.Shutdown();
+        var quit = Item("", Loc.T("Quit")); quit.Click += (_, _) => Application.Current.Shutdown();
         menu.Opened += (_, _) => Motion.Zoom(menu, 0.92, new Point(0.85, 0), 260);
         var gear = (FrameworkElement)sender;
         menu.Closed += (_, _) => { settingsClosedOnGear = Mouse.LeftButton == MouseButtonState.Pressed && new Rect(gear.RenderSize).Contains(Mouse.GetPosition(gear)); settingsMenu = null;
@@ -182,17 +203,5 @@ public partial class MainWindow : Window
         // ignores cancellation, so the explicit Exit action still ends the process.
         e.Cancel = true; Hide();
     }
-    public static void Try(Action action) { try { action(); } catch (Exception ex) { MessageBox.Show("Não foi possível salvar a alteração.\n\n" + ex.Message, "Reminder", MessageBoxButton.OK, MessageBoxImage.Warning); } }
-}
-
-internal static class IntegrationConsent
-{
-    public static bool Ensure(Window owner, TaskService service)
-    {
-        if (service.State.SchedulerConsent) return true;
-        var answer = MessageBox.Show(owner, "Para iniciar com o Windows e avisar mesmo com o widget fechado, o Reminder precisa registrar tarefas no Agendador do Windows.\n\nO próprio Windows grava esses registros internos no disco do sistema (normalmente C:). O aplicativo e suas tarefas pessoais continuam nesta pasta no G:.\n\nVocê autoriza esses registros do Windows?", "Ativar integração com o Windows", MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (answer != MessageBoxResult.Yes) return false;
-        try { service.EnableIntegration(); return true; }
-        catch (Exception ex) { MessageBox.Show(owner, "Não foi possível ativar a integração.\n" + ex.Message, "Reminder"); return false; }
-    }
+    public static void Try(Action action) { try { action(); } catch (Exception ex) { MessageBox.Show(Loc.T("SaveChangeFailed") + "\n\n" + ex.Message, "Reminder", MessageBoxButton.OK, MessageBoxImage.Warning); } }
 }

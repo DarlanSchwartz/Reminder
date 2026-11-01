@@ -21,20 +21,18 @@ internal sealed class NativeAudioPlayer : IDisposable
         ObjectDisposedException.ThrowIf(disposed, this);
         Stop();
         string fullPath = Path.GetFullPath(path);
-        if (!File.Exists(fullPath)) throw new FileNotFoundException("Arquivo de áudio não encontrado.", fullPath);
+        if (!File.Exists(fullPath)) throw new FileNotFoundException("Audio file not found.", fullPath);
         if (fullPath.Contains('"')) throw new ArgumentException("Caminho de áudio inválido.");
         Send($"open \"{fullPath}\" type mpegvideo alias {alias}");
         opened = true;
         try { Send($"setaudio {alias} volume to {Math.Clamp(volume, 0, 1000)}"); Send($"play {alias} repeat"); }
         catch { Stop(); throw; }
     }
-    public string Mode => opened ? Send($"status {alias} mode") : "closed";
-    public string Position => opened ? Send($"status {alias} position") : "0";
     private static string Send(string command)
     {
         var result = new StringBuilder(512);
         uint error = mciSendString(command, result, result.Capacity, IntPtr.Zero);
-        if (error != 0) { var message = new StringBuilder(512); mciGetErrorString(error, message, message.Capacity); throw new InvalidOperationException($"Áudio do Windows ({error}): {message}"); }
+        if (error != 0) { var message = new StringBuilder(512); mciGetErrorString(error, message, message.Capacity); throw new InvalidOperationException($"Windows audio ({error}): {message}"); }
         return result.ToString();
     }
     public void Stop()

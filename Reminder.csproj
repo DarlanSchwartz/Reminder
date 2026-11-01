@@ -9,7 +9,12 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>Reminder</AssemblyName>
     <ApplicationIcon>Assets/Reminder.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Product>Reminder</Product>
+    <Company>DarlanSchwartz</Company>
   </PropertyGroup>
+  <!-- The installer is a separate project. -->
+  <ItemGroup><Compile Remove="Installer/**"/><Page Remove="Installer/**"/><ApplicationDefinition Remove="Installer/**"/><None Remove="Installer/**"/></ItemGroup>
   <ItemGroup><Resource Include="Assets/Reminder.ico"/></ItemGroup>
   <ItemGroup><None Include="reminder.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/></ItemGroup>
 </Project>

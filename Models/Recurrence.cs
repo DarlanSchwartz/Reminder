@@ -41,7 +41,7 @@ public sealed record Recurrence
             var candidate = new DateTimeOffset(date, zone.GetUtcOffset(date));
             if (candidate > after) return candidate;
         }
-        throw new InvalidOperationException("Não foi possível calcular a próxima ocorrência.");
+        throw new InvalidOperationException("Couldn't compute the next occurrence.");
     }
 
     // Occurrences in order, beginning at or slightly before `from`.
@@ -103,38 +103,41 @@ public sealed record Recurrence
 
     private static DateTime WeekStart(DateTime date) => date.AddDays(-(int)date.DayOfWeek);
 
-    private static readonly string[] ShortDays = { "dom", "seg", "ter", "qua", "qui", "sex", "sáb" };
+    // "Every week" vs "Every 3 weeks": the singular key, or the plural key formatted with Interval.
+    private string Every(string one, string many) => Interval == 1 ? Loc.T(one) : Loc.F(many, Interval);
+    private string Date(string format) => Start.ToString(Loc.T(format), Loc.Culture);
 
     [JsonIgnore] public string ShortLabel => Unit switch
     {
-        RepeatUnit.Hour => Interval == 1 ? "A cada hora" : $"A cada {Interval} h",
-        RepeatUnit.Day => Interval == 1 ? "Todo dia" : $"A cada {Interval} dias",
-        RepeatUnit.Week => (Interval == 1 ? "Toda semana" : $"A cada {Interval} semanas") + " · " + DayList(),
-        RepeatUnit.Month => Interval == 1 ? $"Todo mês · dia {Start.Day}" : $"A cada {Interval} meses · dia {Start.Day}",
-        _ => (Interval == 1 ? "Todo ano" : $"A cada {Interval} anos") + " · " + Start.ToString("dd/MM", CultureInfo.InvariantCulture),
-    } + (Until is { } u ? $" · até {u:dd/MM}" : "");
+        RepeatUnit.Hour => Every("EveryHour", "EveryHoursShort"),
+        RepeatUnit.Day => Every("EveryDayShort", "EveryDays"),
+        RepeatUnit.Week => Every("EveryWeek", "EveryWeeks") + " · " + DayList(),
+        RepeatUnit.Month => Every("EveryMonth", "EveryMonths") + " · " + Loc.F("DayOfMonth", Start.Day),
+        _ => Every("EveryYear", "EveryYears") + " · " + Date("fmt.DayMonth"),
+    } + (Until is { } u ? Loc.F("UntilShort", u.ToString(Loc.T("fmt.DayMonth"), Loc.Culture)) : "");
 
     public string Describe()
     {
         string at = Start.ToString("HH:mm", CultureInfo.InvariantCulture);
         string body = Unit switch
         {
-            RepeatUnit.Hour => (Interval == 1 ? "A cada hora" : $"A cada {Interval} horas") + $", a partir de {Start:dd/MM} às {at}",
-            RepeatUnit.Day => (Interval == 1 ? "Todos os dias" : $"A cada {Interval} dias") + $" às {at}",
-            RepeatUnit.Week => (Interval == 1 ? "Toda semana" : $"A cada {Interval} semanas") + $" ({DayList()}) às {at}",
-            RepeatUnit.Month => (Interval == 1 ? "Todo mês" : $"A cada {Interval} meses") + $" no dia {Start.Day} às {at}" + (Start.Day > 28 ? "; em meses mais curtos, no último dia" : ""),
-            _ => (Interval == 1 ? "Todo ano" : $"A cada {Interval} anos") + $" em {Start:dd 'de' MMMM} às {at}",
+            RepeatUnit.Hour => Loc.F("HourlyFrom", Every("EveryHour", "EveryHours"), Date("fmt.DayMonth"), at),
+            RepeatUnit.Day => Loc.F("AtTime", Every("EveryDay", "EveryDays"), at),
+            RepeatUnit.Week => Loc.F("WeeklyAt", Every("EveryWeek", "EveryWeeks"), DayList(), at),
+            RepeatUnit.Month => Loc.F("MonthlyAt", Every("EveryMonth", "EveryMonths"), Start.Day, at) + (Start.Day > 28 ? Loc.T("ShortMonths") : ""),
+            _ => Loc.F("YearlyAt", Every("EveryYear", "EveryYears"), Date("fmt.MonthDay"), at),
         };
-        return body + (Until is { } u ? $", até {u:dd/MM/yyyy}." : ", sem data para terminar.");
+        return body + (Until is { } u ? Loc.F("UntilLong", u.ToString(Loc.T("fmt.Date"), Loc.Culture)) : Loc.T("NoEnd"));
     }
 
     private string DayList()
     {
         var days = EffectiveDays;
-        if (days == (WeekDays)127) return "todos os dias";
-        if (days == (WeekDays)62) return "seg a sex";
+        if (days == (WeekDays)127) return Loc.T("AllWeek");
+        if (days == (WeekDays)62) return Loc.T("MonToFri");
+        var names = Loc.T("DayAbbreviations").Split(',');
         // Monday first, as people usually read a week.
-        return string.Join(", ", new[] { 1, 2, 3, 4, 5, 6, 0 }.Where(d => (days & Flag((DayOfWeek)d)) != 0).Select(d => ShortDays[d]));
+        return string.Join(", ", new[] { 1, 2, 3, 4, 5, 6, 0 }.Where(d => (days & Flag((DayOfWeek)d)) != 0).Select(d => names[d]));
     }
 }
 

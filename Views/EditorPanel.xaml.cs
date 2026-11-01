@@ -76,7 +76,8 @@ public partial class EditorPanel : UserControl
         Progress.Children.Clear();
         for (int i = 1; i <= LastStep; i++)
         {
-            var bar = new System.Windows.Controls.Border { Height = 4, CornerRadius = new CornerRadius(2), Margin = new Thickness(0, 0, i < LastStep ? 5 : 0, 0), Background = (System.Windows.Media.Brush)FindResource(i <= step ? "Accent" : "Line") };
+            var bar = new System.Windows.Controls.Border { Height = 4, CornerRadius = new CornerRadius(2), Margin = new Thickness(0, 0, i < LastStep ? 5 : 0, 0) };
+            bar.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, i <= step ? "Accent" : "Line");
             Progress.Children.Add(bar);
             if (direction > 0 && i == step) Motion.Fill(bar);
         }

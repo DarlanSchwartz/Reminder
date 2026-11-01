@@ -24,4 +24,7 @@ public sealed record TaskItem
     [JsonIgnore] public string AlarmLabel => AlarmAt is not { } a ? "" : a.LocalDateTime.Date == DateTime.Today ? $"{Loc.T("Today")} {a.LocalDateTime:HH:mm}" : a.LocalDateTime.Date == DateTime.Today.AddDays(1) ? $"{Loc.T("Tomorrow")} {a.LocalDateTime:HH:mm}" : a.LocalDateTime.ToString(Loc.T("fmt.Short"), Loc.Culture);
     [JsonIgnore] public bool IsRepeating => Repeat != null && !Completed;
     [JsonIgnore] public string RepeatLabel => Repeat?.ShortLabel ?? "";
+    [JsonIgnore] public bool CanSkipToday => IsRepeating && HasAlarm && AlarmAt!.Value <= EndOfToday;
+    [JsonIgnore] public string SkipTodayTip => Repeat?.Next(EndOfToday) is { } next ? Loc.F("SkipTodayTip", next.LocalDateTime.ToString(Loc.T("fmt.Short"), Loc.Culture)) : Loc.T("SkipTodayLast");
+    public static DateTimeOffset EndOfToday => new(DateTime.Today.AddDays(1).AddTicks(-1));
 }

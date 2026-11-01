@@ -12,7 +12,7 @@ namespace Reminder;
 // instead of printing so the same code runs in-process or inside the open app.
 internal static class Cli
 {
-    private static readonly string[] Commands = ["add", "list", "show", "edit", "done", "reopen", "remove", "help", "--help", "-h", "/?"];
+    private static readonly string[] Commands = ["add", "list", "show", "edit", "done", "skip", "reopen", "remove", "help", "--help", "-h", "/?"];
     public static bool IsCommand(string[] args) => args.Length > 0 && Commands.Contains(args[0].ToLowerInvariant());
 
     public const string Help = """
@@ -24,6 +24,8 @@ internal static class Cli
           edit <id> [options]           Change a task. Only the options given are changed.
           done <id> [--series]          Complete. A repeating task moves to its next
                                         occurrence; --series ends the whole series.
+          skip <id>                     No more alarms today for a repeating task; it
+                                        continues with its first alarm after today.
           reopen <id>                   Mark a completed task as pending again.
           remove <id>                   Delete a task.
 
@@ -122,6 +124,14 @@ internal static class Cli
                 else service.Complete(task);
                 var after = service.State.Tasks.First(t => t.Id == task.Id);
                 return Report(service, after, json, after.Completed ? "Completed" : "Occurrence completed, next");
+            }
+            case "skip":
+            {
+                var task = Find(service, positional);
+                if (task.Repeat == null) throw new CliError("skip works on repeating tasks. Use done for a one-time task.");
+                service.SkipToday(task.Id);
+                var after = service.State.Tasks.First(t => t.Id == task.Id);
+                return Report(service, after, json, after.Completed ? "Series ended, completed" : "Skipped today, next");
             }
             case "reopen":
             {

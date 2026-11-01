@@ -52,6 +52,7 @@ public partial class App : Application
             service = new TaskService(new TaskStore(Path.Combine(root, "data")), new WindowsAlarmScheduler(Path.Combine(root, "Reminder.exe"), instance));
             try { service.RefreshStartup(); service.SaveSettings(); } catch (System.Runtime.InteropServices.COMException) { }
             Loc.Set(service.State.Language);
+            Palette.Apply(service.State.Theme);
             Motion.RegisterPressFeedback();
             widget = new MainWindow(service); MainWindow = widget;
             widget.Show();

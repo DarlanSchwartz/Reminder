@@ -77,7 +77,7 @@ public partial class MainWindow : Window
     }
     private void StyleTab(Button tab, bool active)
     {
-        var target = active ? ((SolidColorBrush)FindResource("Ink")).Color : Color.FromArgb(215, 255, 255, 255);
+        var target = active ? Palette.Get("Ink") : Color.FromArgb(215, 255, 255, 255);
         // Cross-fade the label colour while the highlight glides underneath.
         if (tabPlaced && Motion.Enabled && tab.Foreground is SolidColorBrush current && current.Color != target)
         {
@@ -135,6 +135,13 @@ public partial class MainWindow : Window
         card.IsHitTestVisible = false;
         Motion.Exit(card, () => Motion.Collapse(card, () => { Try(() => service.Complete(task)); Refresh(); }), x: completed ? -40 : 40, y: 0, ms: 200);
     }
+    private void SkipToday(object sender, RoutedEventArgs e)
+    {
+        var task = (TaskItem)((FrameworkElement)sender).DataContext;
+        var card = TaskList.ItemContainerGenerator.ContainerFromItem(task) as FrameworkElement;
+        Try(() => service.SkipToday(task.Id)); Refresh();
+        if (card != null) Motion.Zoom(card, 0.97);
+    }
     private void Settings(object sender, RoutedEventArgs e)
     {
         // The gear toggles the menu. Clicking it while open closes the menu on mouse-down,
@@ -186,9 +193,44 @@ public partial class MainWindow : Window
         languageRow.Children.Add(new TextBlock { Text = Loc.T("Language"), VerticalAlignment = VerticalAlignment.Center });
         var language = Item("", "");
         language.Header = languageRow; language.StaysOpenOnClick = true;
+        // Theme picker: one swatch per theme, half accent and half background.
+        var swatches = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16, 0, 0, 0) };
+        foreach (var (key, accent, canvas) in Palette.All)
+        {
+            bool active = key == Palette.Current;
+            var dot = new Grid { Width = 22, Height = 22 };
+            dot.Children.Add(new System.Windows.Shapes.Ellipse { Width = 16, Height = 16, Stroke = (Brush)FindResource("Line"), StrokeThickness = 1,
+                Fill = new LinearGradientBrush(new GradientStopCollection { new(accent, 0), new(accent, 0.5), new(canvas, 0.5), new(canvas, 1) }, new Point(0, 0), new Point(1, 1)) });
+            if (active) dot.Children.Add(new System.Windows.Shapes.Ellipse { Stroke = (Brush)FindResource("Ink"), StrokeThickness = 1.5 });
+            var choice = new Button { Content = dot, ToolTip = Loc.T("theme." + key), Background = Brushes.Transparent, Padding = new Thickness(1), Margin = new Thickness(1, 0, 0, 0), Focusable = false };
+            AutomationProperties.SetName(choice, Loc.T("theme." + key));
+            choice.Click += (_, _) => { menu.IsOpen = false; if (active) return; service.State.Theme = key; Try(service.SaveSettings); Palette.Apply(key); Refresh(); };
+            swatches.Children.Add(choice);
+        }
+        var themeRow = new DockPanel();
+        DockPanel.SetDock(swatches, Dock.Right);
+        themeRow.Children.Add(swatches);
+        themeRow.Children.Add(new TextBlock { Text = Loc.T("Theme"), VerticalAlignment = VerticalAlignment.Center });
+        var theme = Item("", "");
+        theme.Header = themeRow; theme.StaysOpenOnClick = true;
+        string? background = service.State.AlarmBackground is { } b && System.IO.File.Exists(b) ? b : null;
+        var backdrop = Item("", Loc.T("AlarmBackground"), Loc.T(background == null ? "BackgroundDefault" : System.IO.Path.GetExtension(background) == ".gif" ? "BackgroundGif" : "BackgroundImage"));
+        backdrop.ToolTip = Loc.T("AlarmBackgroundTip");
+        backdrop.Click += (_, _) => {
+            var picker = new Microsoft.Win32.OpenFileDialog { Title = Loc.T("AlarmBackgroundTitle"), Filter = Loc.T("ImagesFilter") + "|" + AlarmBackdrop.Filter };
+            if (picker.ShowDialog(this) != true) return;
+            bool saved = false;
+            Try(() => { service.State.AlarmBackground = AlarmBackdrop.Import(picker.FileName); service.SaveSettings(); saved = true; });
+            if (saved) ShowAlarmPreview();
+        };
+        if (background != null)
+        {
+            var reset = Item("", Loc.T("RemoveAlarmBackground"));
+            reset.Click += (_, _) => Try(() => { AlarmBackdrop.Remove(background); service.State.AlarmBackground = null; service.SaveSettings(); });
+        }
         menu.Items.Add(new Separator());
         var test = Item("", Loc.T("TryAlert"));
-        test.Click += (_, _) => new AlarmWindow(new TaskItem { Title = Loc.T("SampleTitle"), Description = Loc.T("SampleText"), AlarmAt = DateTimeOffset.Now }, service, true).Show();
+        test.Click += (_, _) => ShowAlarmPreview();
         menu.Items.Add(new Separator());
         var quit = Item("", Loc.T("Quit")); quit.Click += (_, _) => Application.Current.Shutdown();
         menu.Opened += (_, _) => Motion.Zoom(menu, 0.92, new Point(0.85, 0), 260);
@@ -200,6 +242,7 @@ public partial class MainWindow : Window
         settingsMenu = menu;
         menu.IsOpen = true;
     }
+    private void ShowAlarmPreview() => new AlarmWindow(new TaskItem { Title = Loc.T("SampleTitle"), Description = Loc.T("SampleText"), AlarmAt = DateTimeOffset.Now }, service, true).Show();
     private void OnClosing(object? sender, CancelEventArgs e)
     {
         service.State.Left = Left; service.State.Top = Top; Try(service.SaveSettings);

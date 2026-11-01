@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.IO;
 
 namespace Reminder;
@@ -113,6 +114,19 @@ internal static class SelfTests
             Assert(snoozed.Repeat == recurring.Repeat && snoozed.AlarmAt < DateTimeOffset.Now.AddMinutes(11), "snooze preserves monthly anchor");
             service.Acknowledge(snoozed);
             Assert(store.Load().Tasks[0].AlarmAt == nextOccurrence.AlarmAt, "snooze returns to monthly schedule");
+            // An hourly task rings at 23:00 today; skipping today moves it to 00:00 tomorrow.
+            var hourlyTask = new TaskItem { Title = "Hourly", AlarmAt = new DateTimeOffset(DateTime.Today.AddHours(23)), Repeat = new Recurrence { Unit = RepeatUnit.Hour, Start = DateTime.Today.AddDays(-1) } };
+            service.Put(hourlyTask);
+            service.SkipToday(hourlyTask.Id);
+            Assert(store.Load().Tasks.First(t => t.Id == hourlyTask.Id).AlarmAt == new DateTimeOffset(DateTime.Today.AddDays(1)), "skip today moves to the first alarm tomorrow");
+            service.SkipToday(hourlyTask.Id);
+            Assert(store.Load().Tasks.First(t => t.Id == hourlyTask.Id).AlarmAt == new DateTimeOffset(DateTime.Today.AddDays(1)), "skip today leaves tomorrow's alarm alone");
+            var endsToday = hourlyTask with { Id = Guid.NewGuid(), Repeat = hourlyTask.Repeat with { Until = DateTime.Today } };
+            service.Put(endsToday);
+            service.SkipToday(endsToday.Id);
+            Assert(store.Load().Tasks.First(t => t.Id == endsToday.Id).Completed, "skip today completes a series that ends today");
+            service.Delete(service.State.Tasks.First(t => t.Id == hourlyTask.Id));
+            service.Delete(service.State.Tasks.First(t => t.Id == endsToday.Id));
             service.Complete(store.Load().Tasks[0]);
             Assert(store.Load().Tasks[0].AlarmAt > nextOccurrence.AlarmAt, "early completion advances one occurrence");
             service.Delete(store.Load().Tasks[0]);
@@ -127,7 +141,7 @@ internal static class SelfTests
             File.WriteAllText(Path.Combine(directory, "tasks.json"), "{ broken");
             try { store.Load(); throw new Exception("corrupt file accepted"); } catch (InvalidDataException) { }
             Assert(File.ReadAllText(Path.Combine(directory, "tasks.json")) == "{ broken", "corrupt input preserved");
-            File.WriteAllText(resultPath, "PASS: persistence, rollback, hourly/daily/weekly/monthly/yearly recurrence, end dates, leap years, snooze, sound import and 16 time parsing cases. No Windows scheduler registrations performed."); return 0;
+            File.WriteAllText(resultPath, "PASS: persistence, rollback, hourly/daily/weekly/monthly/yearly recurrence, end dates, leap years, snooze, skip today, sound import and 16 time parsing cases. No Windows scheduler registrations performed."); return 0;
         } catch (Exception ex) { File.WriteAllText(resultPath, "FAIL: " + ex); return 1; }
     }
     private static void Assert(bool value, string name) { if (!value) throw new Exception(name); }

@@ -22,13 +22,21 @@ public sealed class AlarmWindow : Window
         Topmost = true; ShowInTaskbar = true;
         var area = SystemParameters.WorkArea;
         Left = area.Left; Top = area.Top; Width = area.Width; Height = area.Height;
-        Background = new RadialGradientBrush(Color.FromRgb(20, 84, 74), Color.FromRgb(7, 18, 22)) { Center = new Point(0.5, 0.4), GradientOrigin = new Point(0.5, 0.4), RadiusX = 0.85, RadiusY = 0.85 };
+        Color glow = Palette.Get("AlarmGlow"), edge = Palette.Get("AlarmEdge");
+        Background = new RadialGradientBrush(Palette.Get("AlarmCenter"), edge) { Center = new Point(0.5, 0.4), GradientOrigin = new Point(0.5, 0.4), RadiusX = 0.85, RadiusY = 0.85 };
         Foreground = Brushes.White;
-        var mint = new SolidColorBrush(Color.FromRgb(126, 226, 196));
-        var soft = new SolidColorBrush(Color.FromRgb(190, 212, 205));
+        var mint = new SolidColorBrush(glow);
+        var soft = new SolidColorBrush(Palette.Get("AlarmSoft"));
         var glass = new SolidColorBrush(Color.FromArgb(28, 255, 255, 255));
 
         var root = new Grid();
+        // The chosen picture or GIF, darkened with the theme's tint so the text stays readable.
+        if (AlarmBackdrop.Create(service.State.AlarmBackground, Width) is { } picture)
+        {
+            glass = new SolidColorBrush(Color.FromArgb(56, 255, 255, 255));
+            root.Children.Add(picture);
+            root.Children.Add(new Rectangle { Fill = new RadialGradientBrush(Color.FromArgb(120, edge.R, edge.G, edge.B), Color.FromArgb(190, edge.R, edge.G, edge.B)) { RadiusX = 0.8, RadiusY = 0.8 } });
+        }
         // Live clock in the top-left corner.
         var clockText = new TextBlock { FontSize = 46, FontWeight = FontWeights.Light };
         var dateText = new TextBlock { FontSize = 15, Foreground = soft };
@@ -43,7 +51,7 @@ public sealed class AlarmWindow : Window
         var badge = new Grid { Width = 180, Height = 180, HorizontalAlignment = HorizontalAlignment.Center };
         var rings = new[] { NewRing(mint, 120), NewRing(mint, 120) };
         foreach (var ring in rings) badge.Children.Add(ring);
-        badge.Children.Add(new Ellipse { Width = 104, Height = 104, Fill = new SolidColorBrush(Color.FromArgb(50, 126, 226, 196)), Effect = new DropShadowEffect { Color = Color.FromRgb(126, 226, 196), BlurRadius = 40, ShadowDepth = 0, Opacity = 0.5 } });
+        badge.Children.Add(new Ellipse { Width = 104, Height = 104, Fill = new SolidColorBrush(Color.FromArgb(50, glow.R, glow.G, glow.B)), Effect = new DropShadowEffect { Color = glow, BlurRadius = 40, ShadowDepth = 0, Opacity = 0.5 } });
         var bell = new TextBlock { Text = "", FontFamily = Icons, FontSize = 44, Foreground = mint, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, RenderTransformOrigin = new Point(0.5, 0.1), RenderTransform = new RotateTransform() };
         badge.Children.Add(bell);
         panel.Children.Add(badge);
@@ -65,7 +73,7 @@ public sealed class AlarmWindow : Window
         pills.Children.Add(musicPill);
         panel.Children.Add(pills);
 
-        var done = new Button { Content = Loc.T(preview ? "ClosePreview" : task.Repeat != null ? "CompleteOccurrence" : "CompleteTask"), Style = (Style)FindResource("Primary"), Background = new SolidColorBrush(Color.FromRgb(22, 160, 133)), Padding = new Thickness(36, 18, 36, 18), Margin = new Thickness(0, 40, 0, 0), FontSize = 16, HorizontalAlignment = HorizontalAlignment.Center, MinWidth = 300 };
+        var done = new Button { Content = Loc.T(preview ? "ClosePreview" : task.Repeat != null ? "CompleteOccurrence" : "CompleteTask"), Style = (Style)FindResource("Primary"), Background = new SolidColorBrush(Palette.Get("AlarmButton")), Padding = new Thickness(36, 18, 36, 18), Margin = new Thickness(0, 40, 0, 0), FontSize = 16, HorizontalAlignment = HorizontalAlignment.Center, MinWidth = 300 };
         done.Click += (_, _) => Execute(() => { if (!preview) service.CompleteAlert(task); Close(); });
         panel.Children.Add(done);
         if (!preview) {
@@ -78,6 +86,12 @@ public sealed class AlarmWindow : Window
                 snoozeRow.Children.Add(snooze);
             }
             panel.Children.Add(snoozeRow);
+        }
+        if (!preview && task.Repeat != null)
+        {
+            var skip = new Button { Content = Loc.T("SkipRestOfToday"), Background = glass, Foreground = Brushes.White, Padding = new Thickness(18, 11, 18, 11), Margin = new Thickness(0, 12, 0, 0), FontSize = 14, HorizontalAlignment = HorizontalAlignment.Center };
+            skip.Click += (_, _) => Execute(() => { service.CompleteAlert(task); service.SkipToday(task.Id); Close(); });
+            panel.Children.Add(skip);
         }
         var dismiss = new Button { Content = Loc.T("Dismiss"), HorizontalAlignment = HorizontalAlignment.Center, Background = Brushes.Transparent, Foreground = soft, Margin = new Thickness(0, 14, 0, 0) };
         dismiss.Click += (_, _) => Close(); panel.Children.Add(dismiss);

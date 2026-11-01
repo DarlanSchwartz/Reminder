@@ -23,6 +23,16 @@ public sealed class TaskService
         }
         else Put(task with { Completed = !task.Completed, AlarmAt = null, AlertShown = false });
     }
+    // No more alarms today: a repeating task moves to its first alarm after today.
+    // If the series ends before then, the task is completed.
+    public void SkipToday(Guid id)
+    {
+        var current = State.Tasks.FirstOrDefault(t => t.Id == id);
+        if (current?.Repeat is not { } repeat || current.Completed) return;
+        var endOfToday = TaskItem.EndOfToday;
+        if (current.AlarmAt > endOfToday && !current.AlertShown) return;
+        Put(repeat.Next(endOfToday) is { } next ? current with { AlarmAt = next, AlertShown = false } : current with { Completed = true, AlarmAt = null, AlertShown = true });
+    }
     public void Snooze(Guid id, int minutes = 10)
     {
         var current = State.Tasks.FirstOrDefault(t => t.Id == id);

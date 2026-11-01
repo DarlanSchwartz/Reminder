@@ -12,7 +12,8 @@ A small desktop widget for Windows that keeps your to-do list in view and rings 
 ## Features
 
 - Tasks with an optional due date, alarm and repeat rule: every N hours, days, weeks (pick the weekdays), months or years, with an optional end date.
-- A full-screen alarm with your own song, or a random one from a folder. You can complete, snooze 5/10/30 minutes or dismiss.
+- A full-screen alarm with your own song, or a random one from a folder. You can complete, snooze 5/10/30 minutes, skip the rest of today (for repeating tasks) or dismiss.
+- Six color themes, light and dark, and an optional picture or animated GIF behind the alarm. Both are in the settings menu.
 - Alarms are registered with the Windows Task Scheduler (after you agree), so they fire even when the widget is closed.
 - The widget can float on top of other windows or behave like a normal window. It hides to the tray.
 - A command-line interface so scripts and AI agents can manage tasks.
@@ -36,6 +37,7 @@ reminder add "Pay rent" --at "2026-11-05 09:00" --every month --until 2027-06-05
 reminder add "Gym" --at 07:00 --every week --days mon,wed,fri
 reminder list --json
 reminder done 3fa2c1
+reminder skip 3fa2c1   # no more alarms today for a repeating task
 reminder help
 ```
 

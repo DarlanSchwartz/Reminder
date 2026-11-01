@@ -68,8 +68,6 @@ internal static class SelfTests
             var yearly = new Recurrence { Unit = RepeatUnit.Year, Start = new DateTime(2028, 2, 29, 10, 0, 0) };
             Assert(yearly.Next(At(2028, 3, 1), utc) == At(2029, 2, 28, 10), "leap date in common year");
             Assert(yearly.Next(At(2031, 3, 1), utc) == At(2032, 2, 29, 10), "leap date restored");
-            var legacy = Recurring.Migrate(new TaskItem { MonthlyDay = 31, MonthlyTime = new TimeOnly(9, 0), AlarmAt = new DateTimeOffset(2027, 2, 28, 9, 0, 0, TimeSpan.FromHours(-3)) });
-            Assert(legacy.Repeat is { Unit: RepeatUnit.Month, Start.Day: 31 } && legacy.MonthlyDay == null, "legacy monthly fields migrate");
             string audioSource = Path.Combine(directory, "sample.wav");
             File.WriteAllBytes(audioSource, new byte[] { 1, 2, 3, 4 });
             var library = new SoundLibrary(Path.Combine(directory, "sounds"));
@@ -129,7 +127,7 @@ internal static class SelfTests
             File.WriteAllText(Path.Combine(directory, "tasks.json"), "{ broken");
             try { store.Load(); throw new Exception("corrupt file accepted"); } catch (InvalidDataException) { }
             Assert(File.ReadAllText(Path.Combine(directory, "tasks.json")) == "{ broken", "corrupt input preserved");
-            File.WriteAllText(resultPath, "PASS: persistence, rollback, hourly/daily/weekly/monthly/yearly recurrence, end dates, legacy migration, leap years, snooze, sound import and 16 time parsing cases. No Windows scheduler registrations performed."); return 0;
+            File.WriteAllText(resultPath, "PASS: persistence, rollback, hourly/daily/weekly/monthly/yearly recurrence, end dates, leap years, snooze, sound import and 16 time parsing cases. No Windows scheduler registrations performed."); return 0;
         } catch (Exception ex) { File.WriteAllText(resultPath, "FAIL: " + ex); return 1; }
     }
     private static void Assert(bool value, string name) { if (!value) throw new Exception(name); }

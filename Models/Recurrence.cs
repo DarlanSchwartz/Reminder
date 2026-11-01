@@ -150,16 +150,4 @@ public static class Recurring
         // When the series has ended, behave like a delivered one-time alarm.
         return repeat.Next(after) is { } next ? task with { AlarmAt = next, AlertShown = false, Completed = false } : task with { AlertShown = true };
     }
-
-    // Converts the old "MonthlyDay/MonthlyTime" fields to a monthly Recurrence.
-    public static TaskItem Migrate(TaskItem task)
-    {
-        if (task.MonthlyDay is not { } day || task.Repeat != null) return task with { MonthlyDay = null, MonthlyTime = null };
-        var time = task.MonthlyTime ?? (task.AlarmAt is { } a ? TimeOnly.FromDateTime(a.LocalDateTime) : new TimeOnly(9, 0));
-        var month = (task.AlarmAt?.LocalDateTime ?? DateTime.Today).Date;
-        month = new DateTime(month.Year, month.Month, 1);
-        while (DateTime.DaysInMonth(month.Year, month.Month) < day) month = month.AddMonths(-1);
-        var start = month.AddDays(day - 1).Add(time.ToTimeSpan());
-        return task with { Repeat = new Recurrence { Unit = RepeatUnit.Month, Start = start }, MonthlyDay = null, MonthlyTime = null };
-    }
 }

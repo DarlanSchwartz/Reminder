@@ -10,7 +10,7 @@
     <RootNamespace>ReminderSetup</RootNamespace>
     <ApplicationIcon>../Assets/Reminder.ico</ApplicationIcon>
     <ApplicationManifest>setup.manifest</ApplicationManifest>
-    <Version>1.0.0</Version>
+    <Version>0.0.1</Version>
     <Product>Reminder Setup</Product>
     <Company>DarlanSchwartz</Company>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
@@ -21,8 +21,10 @@
     <Reference Include="Microsoft.CSharp"/>
     <Reference Include="System.IO.Compression"/>
     <Reference Include="System.IO.Compression.FileSystem"/>
+    <Reference Include="System.Runtime.Serialization"/>
     <Reference Include="System.Windows.Forms"/>
     <Resource Include="../Assets/Reminder.ico" Link="Reminder.ico"/>
     <EmbeddedResource Include="$(PayloadZip)" LogicalName="payload.zip"/>
+    <EmbeddedResource Include="Localization/*.json" LogicalName="lang.%(Filename).json"/>
   </ItemGroup>
 </Project>

@@ -27,7 +27,9 @@ public partial class App : Application
     private readonly DispatcherTimer alarmTimer = new();
     private readonly HashSet<Guid> visibleAlarms = new();
     private string pipeName = "";
-    protected override async void OnStartup(StartupEventArgs e)
+    // Not async: culture set inside an async method is undone when it returns,
+    // which would put dates back in the Windows language.
+    protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
         Loc.Set("en");
@@ -43,9 +45,9 @@ public partial class App : Application
                 new TaskService(new TaskStore(Path.Combine(root, "data")), new WindowsAlarmScheduler(Path.Combine(root, "Reminder.exe"), instance)).DisableIntegration();
                 Shutdown(0); return;
             }
-            if (Cli.IsCommand(e.Args)) { Shutdown(await RunCliAsync(e.Args, root, instance)); return; }
+            if (Cli.IsCommand(e.Args)) { _ = ShutdownAfter(RunCliAsync(e.Args, root, instance)); return; }
             if (!ownsMutex) {
-                await SendAsync(string.Join(" ", e.Args)); Shutdown(); return;
+                _ = ShutdownAfter(SendAsync(string.Join(" ", e.Args))); return;
             }
             service = new TaskService(new TaskStore(Path.Combine(root, "data")), new WindowsAlarmScheduler(Path.Combine(root, "Reminder.exe"), instance));
             try { service.RefreshStartup(); service.SaveSettings(); } catch (System.Runtime.InteropServices.COMException) { }
@@ -67,6 +69,11 @@ public partial class App : Application
             alarmTimer.Tick += (_, _) => { alarmTimer.Stop(); CheckDue(); };
             CheckDue();
         } catch (Exception ex) { MessageBox.Show(Loc.T("OpenFailed") + "\n\n" + ex.Message, "Reminder", MessageBoxButton.OK, MessageBoxImage.Error); Shutdown(1); }
+    }
+    private async Task ShutdownAfter(Task work)
+    {
+        try { await work; Shutdown(work is Task<int> code ? code.Result : 0); }
+        catch (Exception ex) { MessageBox.Show(Loc.T("OpenFailed") + "\n\n" + ex.Message, "Reminder", MessageBoxButton.OK, MessageBoxImage.Error); Shutdown(1); }
     }
     // CLI commands run inside the open app when there is one, so the widget and its
     // in-memory state stay in sync; otherwise they work on the data folder directly.

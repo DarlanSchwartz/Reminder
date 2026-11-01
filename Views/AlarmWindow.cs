@@ -34,7 +34,7 @@ public sealed class AlarmWindow : Window
         var dateText = new TextBlock { FontSize = 15, Foreground = soft };
         var corner = new StackPanel { Margin = new Thickness(48, 36, 0, 0), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
         corner.Children.Add(clockText); corner.Children.Add(dateText);
-        void Tick() { clockText.Text = DateTime.Now.ToString("HH:mm"); string d = DateTime.Now.ToString(Loc.T("fmt.Clock")); dateText.Text = char.ToUpper(d[0]) + d[1..]; }
+        void Tick() { clockText.Text = DateTime.Now.ToString("HH:mm"); string d = DateTime.Now.ToString(Loc.T("fmt.Clock"), Loc.Culture); dateText.Text = char.ToUpper(d[0]) + d[1..]; }
         Tick(); clock.Tick += (_, _) => Tick();
         root.Children.Add(corner);
 
@@ -59,7 +59,7 @@ public sealed class AlarmWindow : Window
         if (task.Repeat is { } repeat)
         {
             var next = repeat.Next(task.AlarmAt > DateTimeOffset.Now ? task.AlarmAt.Value : DateTimeOffset.Now);
-            pills.Children.Add(Pill("", repeat.ShortLabel + (next is { } n ? Loc.F("NextOccurrence", n.LocalDateTime.ToString(Loc.T("fmt.Short"))) : Loc.T("LastAlert")), glass, soft));
+            pills.Children.Add(Pill("", repeat.ShortLabel + (next is { } n ? Loc.F("NextOccurrence", n.LocalDateTime.ToString(Loc.T("fmt.Short"), Loc.Culture)) : Loc.T("LastAlert")), glass, soft));
         }
         var musicPill = Pill("", song == null ? Loc.T("DefaultSound") : task.SoundFolder != null || task.SoundName == null ? System.IO.Path.GetFileNameWithoutExtension(song) : System.IO.Path.GetFileNameWithoutExtension(task.SoundName), glass, soft);
         pills.Children.Add(musicPill);

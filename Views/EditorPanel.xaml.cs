@@ -266,11 +266,11 @@ public partial class EditorPanel : UserControl
         if (read is { repeat: { } repeat } result)
         {
             RepeatSummary.Text = repeat.Describe();
-            NextSummary.Text = Loc.F("NextAlert", result.alarm.LocalDateTime.ToString(Loc.T("fmt.Long")));
+            NextSummary.Text = Loc.F("NextAlert", result.alarm.LocalDateTime.ToString(Loc.T("fmt.Long"), Loc.Culture));
         }
         else if (Unit != null) { RepeatSummary.Text = Loc.T("FillFields"); NextSummary.Text = ""; }
         if (FinalSummary != null && read is { } r)
-            FinalSummary.Text = $"{TitleInput.Text.Trim()}\n{Loc.F("SummaryAlert", r.alarm.LocalDateTime.ToString(Loc.T("fmt.Long")))}\n{r.repeat?.Describe() ?? Loc.T("SummaryNoRepeat")}\n{Loc.F("SummarySound", MusicName.Text)}";
+            FinalSummary.Text = $"{TitleInput.Text.Trim()}\n{Loc.F("SummaryAlert", r.alarm.LocalDateTime.ToString(Loc.T("fmt.Long"), Loc.Culture))}\n{r.repeat?.Describe() ?? Loc.T("SummaryNoRepeat")}\n{Loc.F("SummarySound", MusicName.Text)}";
         AlarmError.Text = error;
         AlarmError.Visibility = error.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         SaveButton.IsEnabled = error.Length == 0;

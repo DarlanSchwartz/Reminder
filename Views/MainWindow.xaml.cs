@@ -165,6 +165,10 @@ public partial class MainWindow : Window
             var picker = new Microsoft.Win32.OpenFolderDialog { Title = Loc.T("MusicFolderTitle"), InitialDirectory = service.State.MusicFolder ?? "" };
             if (picker.ShowDialog(this) == true) { service.State.MusicFolder = picker.FolderName; Try(service.SaveSettings); }
         };
+        var command = Item("", Loc.T("AddToPath"));
+        command.ToolTip = Loc.T("AddToPathTip");
+        command.IsCheckable = true; command.IsChecked = CommandPath.IsEnabled();
+        command.Click += (_, _) => Try(() => CommandPath.Set(command.IsChecked));
         // Language picker: a small segmented control inside one menu row.
         var languages = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16, 0, 0, 0) };
         foreach (var (code, name) in Loc.Languages)

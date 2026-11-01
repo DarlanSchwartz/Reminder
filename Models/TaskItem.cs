@@ -11,9 +11,6 @@ public sealed record TaskItem
     public DateTime? DueDate { get; init; }
     public DateTimeOffset? AlarmAt { get; init; }
     public Recurrence? Repeat { get; init; }
-    // Legacy monthly fields, read from older tasks.json files and converted on load.
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public int? MonthlyDay { get; init; }
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public TimeOnly? MonthlyTime { get; init; }
     public string? SoundPath { get; init; }
     public string? SoundName { get; init; }
     // When set, each alarm plays a random MP3/WAV from this folder (falls back to SoundPath).

@@ -1,5 +1,4 @@
 using System.IO;
-using System.Linq;
 using System.Text.Json;
 
 namespace Reminder;
@@ -11,11 +10,7 @@ public sealed class TaskStore
     public AppState Load()
     {
         if (!File.Exists(path)) return new();
-        try {
-            var state = JsonSerializer.Deserialize<AppState>(File.ReadAllText(path)) ?? throw new InvalidDataException("Task file is empty.");
-            state.Tasks = state.Tasks.Select(Recurring.Migrate).ToList();
-            return state;
-        }
+        try { return JsonSerializer.Deserialize<AppState>(File.ReadAllText(path)) ?? throw new InvalidDataException("Task file is empty."); }
         catch (JsonException ex) { throw new InvalidDataException("Couldn't read tasks.json. The file was kept; restore tasks.json.bak before opening Reminder again.", ex); }
     }
     public void Save(AppState state)

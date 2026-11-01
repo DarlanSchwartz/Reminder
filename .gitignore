@@ -1,0 +1,7 @@
+bin/
+obj/
+.build/
+app/
+data/
+test-output/
+test-results.txt

@@ -201,6 +201,9 @@ internal static class Cli
         // Start from the given time, or keep the current series anchor / alarm time.
         DateTime start = o.TryGetValue("--at", out var at) ? ParseWhen(at, now)
             : task.Repeat?.Start ?? task.AlarmAt?.LocalDateTime ?? throw new CliError("give --at to set the alarm.");
+        // Stored as a wall-clock time, like the editor does. A Local kind would be saved
+        // with today's UTC offset and drift by the difference after a time zone change.
+        start = DateTime.SpecifyKind(start, DateTimeKind.Unspecified);
 
         Recurrence? repeat = flags.Contains("--no-repeat") ? null : task.Repeat;
         if (o.TryGetValue("--every", out var every))
@@ -226,9 +229,8 @@ internal static class Cli
             repeat = repeat with { Start = start };
         }
 
-        var local = DateTime.SpecifyKind(start, DateTimeKind.Unspecified);
-        if (TimeZoneInfo.Local.IsInvalidTime(local)) throw new CliError("that time doesn't exist in the local time zone.");
-        var chosen = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
+        if (TimeZoneInfo.Local.IsInvalidTime(start)) throw new CliError("that time doesn't exist in the local time zone.");
+        var chosen = new DateTimeOffset(start, TimeZoneInfo.Local.GetUtcOffset(start));
         DateTimeOffset alarm;
         if (repeat != null)
         {

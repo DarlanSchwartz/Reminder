@@ -36,7 +36,9 @@ public sealed record Recurrence
         foreach (var local in Candidates(from < Start ? Start : from))
         {
             if (Until is { } until && local.Date > until.Date) return null;
-            var date = local;
+            // A wall-clock time in `zone`. A Local or Utc kind would make the offset
+            // constructor below throw whenever `zone` isn't that kind's zone.
+            var date = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
             while (zone.IsInvalidTime(date)) date = date.AddMinutes(1);
             var candidate = new DateTimeOffset(date, zone.GetUtcOffset(date));
             if (candidate > after) return candidate;

@@ -85,6 +85,11 @@ internal static class Cli
             }
             else positional.Add(a);
         }
+        // Commands take at most one argument (a title or an id). Extra words usually mean
+        // a title with spaces wasn't quoted; dropping them silently would lose text.
+        int allowed = command is "list" ? 0 : 1;
+        if (command is not ("help" or "--help" or "-h" or "/?") && positional.Count > allowed)
+            throw new CliError($"unexpected argument \"{positional[allowed]}\". Put text with spaces in quotes.");
         bool json = flags.Contains("--json");
         var now = DateTime.Now;
 
@@ -161,8 +166,8 @@ internal static class Cli
     private static TaskItem Find(TaskService service, List<string> positional)
     {
         if (positional.Count == 0) throw new CliError("give the task id (see list).");
-        string id = positional[0].Trim().ToLowerInvariant();
-        var matches = service.State.Tasks.Where(t => t.Id.ToString("N").StartsWith(id.Replace("-", ""), StringComparison.Ordinal)).ToList();
+        string id = positional[0].Trim().ToLowerInvariant().Replace("-", "");
+        var matches = service.State.Tasks.Where(t => t.Id.ToString("N").StartsWith(id, StringComparison.Ordinal)).ToList();
         if (id.Length < 4 || matches.Count == 0) throw new CliError($"no task with id {positional[0]}.");
         if (matches.Count > 1) throw new CliError($"id {positional[0]} is ambiguous; use more characters.");
         return matches[0];
@@ -275,6 +280,10 @@ internal static class Cli
         return result == WeekDays.None ? throw new CliError("--days is empty.") : result;
     }
 
+    // About 100 years: keeps relative offsets like +99999999d from overflowing DateTime.
+    private const int MaxOffsetDays = 36500;
+    private static CliError TooFar(string text) => new($"\"{text}\" is too far ahead.");
+
     private static readonly string[] DateFormats = ["yyyy-MM-dd", "dd/MM/yyyy", "d/M/yyyy", "dd/MM", "d/M"];
 
     public static DateTime ParseDate(string text, DateTime now)
@@ -282,7 +291,8 @@ internal static class Cli
         string s = text.Trim().ToLowerInvariant();
         if (s is "today" or "hoje" or "hoy") return now.Date;
         if (s is "tomorrow" or "amanhã" or "amanha" or "mañana" or "manana") return now.Date.AddDays(1);
-        if (s.StartsWith('+') && s.EndsWith('d') && int.TryParse(s[1..^1], NumberStyles.None, CultureInfo.InvariantCulture, out int days)) return now.Date.AddDays(days);
+        if (s.StartsWith('+') && s.EndsWith('d') && int.TryParse(s[1..^1], NumberStyles.None, CultureInfo.InvariantCulture, out int days))
+            return days <= MaxOffsetDays ? now.Date.AddDays(days) : throw TooFar(text);
         if (DateTime.TryParseExact(s, DateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
             return s.Count(c => c == '/') == 1 && date.Date < now.Date ? date.AddYears(1).Date : date.Date;
         throw new CliError($"invalid date \"{text}\". Use 2026-11-30, 30/11/2026, today or tomorrow.");
@@ -295,6 +305,8 @@ internal static class Cli
         if (s is "now" or "agora" or "ahora") return now.AddMinutes(1);
         if (s.Length > 2 && s[0] == '+' && int.TryParse(s[1..^1], NumberStyles.None, CultureInfo.InvariantCulture, out int amount))
         {
+            double days = s[^1] switch { 'm' => amount / 1440.0, 'h' => amount / 24.0, 'd' => amount, 'w' => 7.0 * amount, _ => 0 };
+            if (days > MaxOffsetDays) throw TooFar(text);
             DateTime result = s[^1] switch { 'm' => now.AddMinutes(amount), 'h' => now.AddHours(amount), 'd' => now.AddDays(amount), 'w' => now.AddDays(7 * amount), _ => default };
             if (result != default) return new DateTime(result.Year, result.Month, result.Day, result.Hour, result.Minute, 0);
         }

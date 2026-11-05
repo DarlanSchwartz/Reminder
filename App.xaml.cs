@@ -50,7 +50,9 @@ public partial class App : Application
                 _ = ShutdownAfter(SendAsync(string.Join(" ", e.Args))); return;
             }
             service = new TaskService(new TaskStore(Path.Combine(root, "data")), new WindowsAlarmScheduler(Path.Combine(root, "Reminder.exe"), instance));
-            try { service.RefreshStartup(); service.SaveSettings(); } catch (System.Runtime.InteropServices.COMException) { }
+            // Best effort: the widget works without it, so a missing or failing Task
+            // Scheduler (or a read-only data folder) must not stop the app from opening.
+            try { service.RefreshStartup(); service.SaveSettings(); } catch (Exception) { }
             Loc.Set(service.State.Language);
             Palette.Apply(service.State.Theme);
             Motion.RegisterPressFeedback();
@@ -124,6 +126,11 @@ public partial class App : Application
                 await Dispatcher.InvokeAsync(() => { if (message?.StartsWith("--alarm ", StringComparison.Ordinal) == true) CheckDue(); else if (widget != null) NativeWindow.Activate(widget); });
             } catch (OperationCanceledException) { break; }
             catch (IOException) { /* A caller may close before sending. Keep accepting the next launch. */ }
+            catch (Exception) {
+                // E.g. a malformed message. Without this the loop would end and later launches,
+                // alarms from Task Scheduler and CLI calls would no longer reach the app.
+                try { await Task.Delay(1000, token); } catch (OperationCanceledException) { break; }
+            }
         }
     }
     private void ScheduleNext()
@@ -146,11 +153,23 @@ public partial class App : Application
                 var alert = new AlarmWindow(task, service);
                 alert.Closed += (_, _) => { visibleAlarms.Remove(task.Id); Dispatcher.BeginInvoke(CheckDue); };
                 alert.Show();
-                service.Acknowledge(task);
-                break;
-            } catch (Exception ex) { MessageBox.Show(Loc.T("AlarmStateFailed") + "\n" + ex.Message, "Reminder"); }
+            } catch (Exception) {
+                // The alarm screen couldn't open, so nothing would ever clear the id and no
+                // later alarm would ring. Show the reminder as a plain message instead.
+                MessageBox.Show(task.Title + (task.Description.Length > 0 ? "\n\n" + task.Description : ""), "Reminder", MessageBoxButton.OK, MessageBoxImage.Information);
+                Acknowledge(task);
+                visibleAlarms.Remove(task.Id);
+                continue;
+            }
+            Acknowledge(task);
+            break;
         }
         ScheduleNext();
+    }
+    private void Acknowledge(TaskItem task)
+    {
+        try { service!.Acknowledge(task); }
+        catch (Exception ex) { MessageBox.Show(Loc.T("AlarmStateFailed") + "\n" + ex.Message, "Reminder"); }
     }
     protected override void OnExit(ExitEventArgs e)
     {

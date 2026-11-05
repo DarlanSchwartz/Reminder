@@ -24,8 +24,11 @@ public static class AlarmBackdrop
         Directory.CreateDirectory(Folder);
         string target = Path.Combine(Folder, "alarm" + Path.GetExtension(source).ToLowerInvariant());
         if (string.Equals(Path.GetFullPath(source), Path.GetFullPath(target), StringComparison.OrdinalIgnoreCase)) return target;
+        // Copy first, so a failed copy keeps the current background.
+        string temp = Path.Combine(Folder, "incoming.tmp");
+        File.Copy(source, temp, overwrite: true);
         foreach (var old in Directory.GetFiles(Folder, "alarm.*")) File.Delete(old);
-        File.Copy(source, target);
+        File.Move(temp, target);
         return target;
     }
     public static void Remove(string? path)

@@ -15,7 +15,13 @@ public sealed class SoundLibrary
         string hash = Convert.ToHexString(SHA256.HashData(input));
         Directory.CreateDirectory(directory);
         string target = Path.Combine(directory, hash + Path.GetExtension(source).ToLowerInvariant());
-        if (!File.Exists(target)) { input.Position = 0; using var output = File.Create(target); input.CopyTo(output); }
+        if (File.Exists(target)) return target;
+        // Copy under a temporary name first: the hash name is trusted as complete, so
+        // an interrupted copy must never be left behind under it.
+        string temp = target + ".tmp";
+        input.Position = 0;
+        using (var output = File.Create(temp)) input.CopyTo(output);
+        File.Move(temp, target, overwrite: true);
         return target;
     }
     // A random MP3/WAV from a folder, or null when there is none to play.

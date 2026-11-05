@@ -5,14 +5,6 @@ using System.Security.Principal;
 
 namespace Reminder;
 
-public interface IAlarmScheduler
-{
-    bool IsStartupEnabled();
-    void Set(TaskItem task);
-    void Remove(Guid id);
-    void SetStartup(bool enabled);
-}
-
 public sealed class WindowsAlarmScheduler : IAlarmScheduler
 {
     private readonly string executable;

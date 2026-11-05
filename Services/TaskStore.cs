@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
@@ -10,8 +11,12 @@ public sealed class TaskStore
     public AppState Load()
     {
         if (!File.Exists(path)) return new();
-        try { return JsonSerializer.Deserialize<AppState>(File.ReadAllText(path)) ?? throw new InvalidDataException("Task file is empty."); }
+        AppState state;
+        try { state = JsonSerializer.Deserialize<AppState>(File.ReadAllText(path)) ?? throw new InvalidDataException("Task file is empty."); }
         catch (JsonException ex) { throw new InvalidDataException("Couldn't read tasks.json. The file was kept; restore tasks.json.bak before opening Reminder again.", ex); }
+        // A hand-edited file may say "Tasks": null or contain null entries; both would crash later.
+        state.Tasks = state.Tasks is null ? new List<TaskItem>() : state.Tasks.FindAll(t => t is not null);
+        return state;
     }
     public void Save(AppState state)
     {

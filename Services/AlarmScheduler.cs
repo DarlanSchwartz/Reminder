@@ -1,17 +1,10 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 
 namespace Reminder;
-
-public interface IAlarmScheduler
-{
-    bool IsStartupEnabled();
-    void Set(TaskItem task);
-    void Remove(Guid id);
-    void SetStartup(bool enabled);
-}
 
 public sealed class WindowsAlarmScheduler : IAlarmScheduler
 {
@@ -59,8 +52,9 @@ public sealed class WindowsAlarmScheduler : IAlarmScheduler
                 dynamic trigger = definition.Triggers.Create(time == null ? 9 : 1);
                 if (time == null) trigger.UserId = sid;
                 else {
-                    trigger.StartBoundary = time.Value.ToString("yyyy-MM-dd'T'HH:mm:sszzz");
-                    trigger.EndBoundary = time.Value.AddYears(1).ToString("yyyy-MM-dd'T'HH:mm:sszzz");
+                    // Task Scheduler expects ISO 8601; ':' in a format string is the culture's time separator.
+                    trigger.StartBoundary = time.Value.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture);
+                    trigger.EndBoundary = time.Value.AddYears(1).ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture);
                 }
                 dynamic action = definition.Actions.Create(0);
                 action.Path = executable;

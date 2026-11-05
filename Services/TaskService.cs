@@ -60,7 +60,9 @@ public sealed class TaskService
         catch { State.Tasks = before; throw; }
         try { if (State.SchedulerConsent) scheduler.Set(task); }
         catch {
-            State.Tasks = before; store.Save(State);
+            State.Tasks = before;
+            // Rollback is best effort: the scheduler error is the one to report.
+            try { store.Save(State); } catch { }
             // Restore the previous registration when replacing an existing alarm.
             var previous = before.Find(t => t.Id == task.Id);
             try { if (previous != null) scheduler.Set(previous); else scheduler.Remove(task.Id); } catch { }
@@ -74,7 +76,12 @@ public sealed class TaskService
         var before = State.Tasks.ToList();
         State.Tasks.RemoveAll(t => t.Id == task.Id);
         try { store.Save(State); }
-        catch { State.Tasks = before; if (State.SchedulerConsent) scheduler.Set(task); throw; }
+        catch {
+            State.Tasks = before;
+            // Re-register the alarm that was removed above; the save error is the one to report.
+            try { if (State.SchedulerConsent) scheduler.Set(task); } catch { }
+            throw;
+        }
         Changed?.Invoke();
     }
     public void EnableIntegration()

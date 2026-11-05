@@ -5,8 +5,6 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
-using System.Windows.Data;
-using System.Windows.Markup;
 
 namespace Reminder;
 
@@ -14,14 +12,14 @@ namespace Reminder;
 // "_language" is the name shown in the menu and "_culture" sets date formats;
 // missing keys fall back to English. XAML binds through {local:Tr Key}, so
 // switching the language updates open views without reopening them.
-public sealed class Loc : INotifyPropertyChanged
+// The WPF-only parts are in Loc.Wpf.cs, so this file builds on any platform.
+public sealed partial class Loc : INotifyPropertyChanged
 {
     public static Loc Instance { get; } = new();
     private static readonly Dictionary<string, Dictionary<string, string>> Tables = LoadTables();
     public static readonly (string Code, string Name)[] Languages = Tables.Select(t => (t.Key, t.Value["_language"])).OrderBy(l => l.Key != "en").ThenBy(l => l.Key).ToArray();
     public static string Language { get; private set; } = "en";
     public static CultureInfo Culture { get; private set; } = CultureInfo.GetCultureInfo("en-US");
-    public static XmlLanguage Xml => XmlLanguage.GetLanguage(Culture.IetfLanguageTag);
     public static event Action? Changed;
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -50,14 +48,8 @@ public sealed class Loc : INotifyPropertyChanged
         Culture = CultureInfo.GetCultureInfo(Tables[Language].GetValueOrDefault("_culture", "en-US"));
         CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = Culture;
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.DefaultThreadCurrentUICulture = Culture;
-        Instance.PropertyChanged?.Invoke(Instance, new PropertyChangedEventArgs(Binding.IndexerName));
+        // "Item[]" (WPF's Binding.IndexerName) refreshes every binding to the indexer.
+        Instance.PropertyChanged?.Invoke(Instance, new PropertyChangedEventArgs("Item[]"));
         Changed?.Invoke();
     }
-}
-
-// {local:Tr Key} binds a property to the current translation of Key.
-public sealed class Tr(string key) : MarkupExtension
-{
-    public override object ProvideValue(IServiceProvider services) =>
-        new Binding($"[{key}]") { Source = Loc.Instance, Mode = BindingMode.OneWay }.ProvideValue(services);
 }

@@ -13,8 +13,9 @@
     <Product>Reminder</Product>
     <Company>DarlanSchwartz</Company>
   </PropertyGroup>
-  <!-- The installer is a separate project. -->
+  <!-- The installer and the unit tests are separate projects. -->
   <ItemGroup><Compile Remove="Installer/**"/><Page Remove="Installer/**"/><ApplicationDefinition Remove="Installer/**"/><None Remove="Installer/**"/></ItemGroup>
+  <ItemGroup><Compile Remove="Reminder.Tests/**"/><None Remove="Reminder.Tests/**"/><EmbeddedResource Remove="Reminder.Tests/**"/></ItemGroup>
   <ItemGroup><Resource Include="Assets/Reminder.ico"/></ItemGroup>
   <!-- One JSON file per language; see Localization/Loc.cs. -->
   <ItemGroup><EmbeddedResource Include="Localization/*.json" LogicalName="lang.%(Filename).json"/></ItemGroup>

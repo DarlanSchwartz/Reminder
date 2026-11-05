@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Cross-platform unit tests for the app's core logic (tasks, recurrence, storage, CLI,
+       translations). The app itself is WPF and Windows-only, so instead of referencing it
+       this project compiles the platform-neutral source files directly. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Reminder.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Models/*.cs" Link="App/Models/%(Filename)%(Extension)" />
+    <Compile Include="../Services/TaskService.cs;../Services/TaskStore.cs;../Services/IAlarmScheduler.cs;../Services/AlarmTimeParser.cs" Link="App/Services/%(Filename)%(Extension)" />
+    <Compile Include="../Audio/SoundLibrary.cs" Link="App/Audio/%(Filename)%(Extension)" />
+    <Compile Include="../Cli/Cli.cs" Link="App/Cli/%(Filename)%(Extension)" />
+    <Compile Include="../Localization/Loc.cs" Link="App/Localization/%(Filename)%(Extension)" />
+    <!-- Same resource names as Reminder.csproj, so Loc finds the real translations. -->
+    <EmbeddedResource Include="../Localization/*.json" LogicalName="lang.%(Filename).json" Link="App/Localization/%(Filename)%(Extension)" />
+    <None Include="../Installer/Localization/*.json" Link="InstallerLocalization/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+</Project>
